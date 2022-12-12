@@ -1,0 +1,5 @@
+@echo off
+
+cd C:\App\ords
+ords serve
+service name:-AutorunORDS.bat

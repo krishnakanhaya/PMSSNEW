@@ -1,0 +1,4 @@
+RUN ADMINISTRATOR COMMAND AND SET PATH IN WHICH ORDS BIN IS AVAILABLE THEN write  THIS -    ords serve 
+
+ex:-C:\App\ords\bin and then enter ords serve
+C:\App\ords\bin ords serve

@@ -1,0 +1,527 @@
+
+	Oracle Support	- 38 mins ago		[ODM Action Plan]
+
+
+-------------------- ACTION PLAN DETAILS BELOW---------------------
+
+Owner (Who)
+------------------------------------------------------
+krishna.kanhaya@teri.res.in
+
+Follow-up (When)
+------------------------------------------------------
+Next Update
+
+ACTION PLAN (What, Why)
+-------------------------------------------------------
+For better tracking and documentation(per Support Policy) and for your future reference, I have updated the detailed steps in the SR.
+
+Also below new SR's were created for better monitoring
+
+SR 3-30752217411 : 22.2.1: Could not start Standalone Mode because the listen port: 8080 is already in use
+SR 3-30752217563 : 22.2.1: 503 Service Unavailable Running /ords URL
+SR 3-30752661143 : 22.2.1: Steps to configure ORDS in Apache Tomcat
+
+Thanks, Suresh
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 41 mins ago		[ODM Data Collection]
+
+
+---------------Wlahthrough of install/config from chat------------
+
+Requirement: Install oracle apex and configure ords with tomcat ,Installed successfully oracle apex but got error java is not recogized command.
+
+How to configure ords with jdk and tomcat?
+
+1. Installed JDK 11 in C:\Program Files\Java\jdk-11.0.10
+2. Testing java -verison in the command prompt
+
+C:\Windows\system32>java -version
+java version "11.0.10" 2021-01-19 LTS
+Java(TM) SE Runtime Environment 18.9 (build 11.0.10+8-LTS-162)
+Java HotSpot(TM) 64-Bit Server VM 18.9 (build 11.0.10+8-LTS-162, mixed mode)
+
+3. Use a command prompt with administrator privileges.
+
+SetX PATH "%PATH%;C:\App\ords\bin"
+SetX ORDS_CONFIG "C:\App\ords\ORDS_config"
+SetX ORDS_LOGS "C:\App\ords\ords_logs"
+
+Output
+=====
+C:\Windows\system32>SetX PATH "%PATH%;C:\App\ords\bin"
+
+SUCCESS: Specified value was saved.
+
+C:\Windows\system32>SetX ORDS_CONFIG "C:\App\ords\ORDS_config"
+
+SUCCESS: Specified value was saved.
+
+C:\Windows\system32>SetX ORDS_LOGS "C:\App\ords\ords_logs"
+
+SUCCESS: Specified value was saved.
+
+4. Followed the step 5 as a reference from ( NOTE 2874117.1 ) to input the values as per your requirement
+
+ords install --interactive --log-folder ORDS_LOGS
+
+
+Enter a number to select the type of installation
+[1] Install or upgrade ORDS in the database only
+[2] Create or update a database pool and install/upgrade ORDS in the database
+[3] Create or update a database pool only
+Choose [2]: 2
+Enter a number to select the database connection type to use
+[1] Basic (host name, port, service name)
+[2] TNS (TNS alias, TNS directory)
+[3] Custom database URL
+Choose [1]: 1
+Enter the database host name [localhost]: 172.16.0.203
+Enter the database listen port [1521]:
+Enter the database service name [orcl]:
+Provide database user name with administrator privileges.
+Enter the administrator username: sys
+Enter the database password for SYS AS SYSDBA:
+Connecting to database user: SYS AS SYSDBA url: jdbc:oracle:thin:@//172.16.0.203:1521/orcl
+2022-09-29T04:57:51.388Z WARNING Failed to connect to user: SYS AS SYSDBA url: jdbc:oracle:thin:@//172.16.0.203:1521/orcl
+Listener refused the connection with the following error:
+ORA-12514, TNS:listener does not currently know of service requested in connect descriptor
+(CONNECTION_ID=Umhu7RI0Rnmmbcs8PJbOHA==)
+java.sql.SQLRecoverableException: Listener refused the connection with the following error:
+ORA-12514, TNS:listener does not currently know of service requested in connect descriptor
+(CONNECTION_ID=Umhu7RI0Rnmmbcs8PJbOHA==)
+
+5. Check the DB connection servce name should be APEXDB as per the enviornment.
+
+6. Running as standalone shows below error
+Enter the APEX static resources location: C:\App\apex_20.1\apex\images
+The setting named: db.connectionType was set to: basic in configuration: default
+The setting named: db.hostname was set to: 172.16.0.203 in configuration: default
+The setting named: db.port was set to: 1521 in configuration: default
+The setting named: db.servicename was set to: APEXDB in configuration: default
+The setting named: plsql.gateway.mode was set to: proxied in configuration: default
+The setting named: db.username was set to: ORDS_PUBLIC_USER in configuration: default
+The setting named: db.password was set to: ****** in configuration: default
+The setting named: feature.sdw was set to: true in configuration: default
+The global setting named: database.api.enabled was set to: true
+The setting named: restEnabledSql.active was set to: true in configuration: default
+The setting named: security.requestValidationFunction was set to: wwv_flow_epg_include_modules.authorize in configuration: default
+The global setting named: standalone.http.port was set to: 8080
+The global setting named: standalone.static.path was set to: /C:/App/apex_20.1/apex/images/
+The global setting named: standalone.static.context.path was set to: /i
+The global setting named: standalone.context.path was set to: /ords
+The global setting named: standalone.doc.root was set to: C:\App\ords\ORDS_config\global\doc_root
+2022-09-29T05:08:43.451Z INFO Installing Oracle REST Data Services version 22.2.1.r2021302 in NON_CDB
+2022-09-29T05:08:44.669Z INFO ... Verified database prerequisites
+2022-09-29T05:08:45.060Z INFO ... Created Oracle REST Data Services proxy user
+2022-09-29T05:08:45.685Z INFO ... Created Oracle REST Data Services schema
+2022-09-29T05:08:46.263Z INFO ... Granted privileges to Oracle REST Data Services
+2022-09-29T05:08:50.685Z INFO ... Created Oracle REST Data Services database objects
+2022-09-29T05:08:59.935Z INFO Completed installation for Oracle REST Data Services version 22.2.1.r2021302. Elapsed time: 00:00:16.453
+
+2022-09-29T05:08:59.982Z INFO Completed configuring PL/SQL gateway user for Oracle REST Data Services version 22.2.1.r2021302. Elapsed time: 00:00:00.47
+
+2022-09-29T05:08:59.982Z INFO Log file written to c:\App\ords\bin\ORDS_LOG\ords_install_2022-09-29_050843_32816.log
+2022-09-29T05:09:00.107Z INFO HTTP and HTTP/2 cleartext listening on host: 0.0.0.0 port: 8080
+2022-09-29T05:09:00.123Z INFO Disabling document root because the specified folder does not exist: C:\App\ords\ORDS_config\global\doc_root
+2022-09-29T05:09:02.513Z INFO Configuration properties for: |default|lo|
+db.servicename=APEXDB
+standalone.context.path=/ords
+db.hostname=172.16.0.203
+db.password=******
+conf.use.wallet=true
+security.requestValidationFunction=wwv_flow_epg_include_modules.authorize
+standalone.static.context.path=/i
+database.api.enabled=true
+db.username=ORDS_PUBLIC_USER
+standalone.http.port=8080
+standalone.static.path=/C:/App/apex_20.1/apex/images/
+restEnabledSql.active=true
+resource.templates.enabled=false
+plsql.gateway.mode=proxied
+db.port=1521
+feature.sdw=true
+config.required=true
+db.connectionType=basic
+standalone.doc.root=C:\App\ords\ORDS_config\global\doc_root
+
+2022-09-29T05:09:02.513Z WARNING *** jdbc.MaxLimit in configuration |default|lo| is using a value of 10, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:09:02.513Z WARNING *** jdbc.InitialLimit in configuration |default|lo| is using a value of 3, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:09:11.498Z INFO Oracle REST Data Services initialized
+Oracle REST Data Services version : 22.2.1.r2021302
+Oracle REST Data Services server info: jetty/9.4.48.v20220622
+Oracle REST Data Services java info: Java HotSpot(TM) 64-Bit Server VM 11.0.10+8-LTS-162
+
+2022-09-29T05:09:11.529Z INFO Destroyed pool : |default|lo|-2022-09-29T05-09-02.451252500Z
+2022-09-29T05:09:11.545Z SEVERE Could not start Standalone Mode because the listen port: 8080 is already in use by another process. Check if another instance of ords is already running
+
+Error: 2022-09-29T05:09:11.545Z SEVERE Could not start Standalone Mode because the listen port: 8080 is already in use by another process. Check if another instance of ords is already running
+
+7. Changed the port using steps from SR 3-30752217411
+8. Now ORDS is started
+
+2022-09-29T05:33:40.404Z WARNING *** jdbc.MaxLimit in configuration |default|lo| is using a value of 10, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:33:40.404Z WARNING *** jdbc.InitialLimit in configuration |default|lo| is using a value of 3, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:33:50.029Z INFO Oracle REST Data Services initialized
+Oracle REST Data Services version : 22.2.1.r2021302
+Oracle REST Data Services server info: jetty/9.4.48.v20220622
+Oracle REST Data Services java info: Java HotSpot(TM) 64-Bit Server VM 11.0.10+8-LTS-162
+
+9. Running APEX URL shows http://<servername>:<port>/ords
+
+503 Service Unavailable
+2022-09-29T05:43:01.854968500Z | lQ_GAbOU3uQcbCOlgyD50A |
+
+ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+10. Fixed 503 issue using SR 3-30752217563 : 22.2.1: 503 Service Unavailable Running /ords URL
+
+11. Confirmed APEX/ORDS is working in standalone mode.
+12. Need steps to configure ORDS with Apache Tomcat. Steps provided in below SR
+
+SR 3-30752661143 : 22.2.1: Steps to configure ORDS in Apache Tomcat
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 4+ hours ago		[Customer Conversation]
+
+
+Chat initiated
+Chat Transcript : CHAT-3-30742577601-2
+
+ 	 	 
+ 	
+ 
+ 
+
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[ODM Action Plan]
+
+
+-------------------- ACTION PLAN DETAILS BELOW---------------------
+
+Owner (Who)
+------------------------------------------------------
+krishna.kanhaya@teri.res.in
+
+Follow-up (When)
+------------------------------------------------------
+Next Update
+
+ACTION PLAN (What, Why)
+-------------------------------------------------------
+You can follow below doucments steps to install 22.2.1. The document is created for 22.1 which is already applicable for 22.2.1.
+Check for the sections described for Windows in the below document.
+
+How To Install ORDS 22.1+ ( Doc ID 2874117.1 )
+
+Thanks, Suresh
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[ODM Issue Verification]
+
+
+Verified the issue in the screen shots as noted below:
+
+C:\App>cd ords
+
+C:\App\ords>java -jar ords.war
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+C:\App\ords>java -jar ords.war install
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[ODM Issue Clarification]
+
+
+On : 22.2.1 version, All Issues
+
+22.2.1 - Error find in ORDS Installation
+
+1.ORDS Version- Version 22.2.1.202.1302
+2. jdk version-jdk-11.0.10_windows-x64_bin
+
+Trying to install ords with JDK 11 and shows below errors
+
+C:\App>cd ords
+
+C:\App\ords>java -jar ords.war
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+C:\App\ords>java -jar ords.war install
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+ERROR
+-----------------------
+'java' is not recognized as an internal or external command, operable program or batch file.
+
+STEPS
+-----------------------
+The issue can be reproduced at will with the following steps:
+1. Downloaded ORDS 22.2.1 and JDK 11
+2. Unzipped ORDS 22.2.1. in c:\App\ords
+3. Running below commands to try installing the ORDS
+java -jar ords.war
+ava -jar ords.war install
+
+BUSINESS IMPACT
+-----------------------
+The issue has the following business impact:
+Due to this issue, unable to install latest version of ORDS
+
+ 	 	 
+ 	
+ 
+ 
+KRISHNA.KANHAYA@TERI.RES.IN	- Wednesday		[Update from Customer]
+
+
+can you please tell me how can i setup the path of jdk and ords
+
+ 	 	 
+ 	
+ 
+ 
+KRISHNA.KANHAYA@TERI.RES.IN	- Wednesday		[Update from Customer]
+
+
+1.ORDS Version- Version 22.2.1.202.1302
+2. jdk version-jdk-11.0.10_windows-x64_bin
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[ODM Action Plan]
+
+
+-------------------- ACTION PLAN DETAILS BELOW---------------------
+
+Owner (Who)
+------------------------------------------------------
+krishna.kanhaya@teri.res.in
+
+Follow-up (When)
+------------------------------------------------------
+Next Update
+
+ACTION PLAN (What, Why)
+-------------------------------------------------------
+1. What is the version of ORDS you are trying to install?
+
+2. What is the JDK version and path you have installed?
+
+3. Run below command in a command prompt and update the outcome
+
+java -version
+
+Thanks, Suresh
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[Customer Conversation]
+
+
+Chat initiated
+Chat Transcript : CHAT-3-30742577601-1
+(1:17 PM UTC+05:00) Suresh entered the chat.
+(1:17 PM UTC+05:00) Suresh: I'm getting our conversation about 3-30742577601 ready; just a moment.
+(1:28 PM UTC+05:00) krishna kanhaya did not respond.
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[Notes]
+
+
+Hello,
+
+Thank you for contacting Oracle Support team.
+
+Your Service Request (SR) has been assigned to me; Please allow me to review this issue and I will respond to you shortly with an update or an action plan.
+
+The following document can enhance your experience with Global Customer Services:
+Doc ID: 166650.1 : Working Effectively With Support
+
+Thank You,
+Suresh
+Oracle ORDS Support
+Business Hours:(Mon - Fri)- 6:00 AM to 02:00 PM IST
+
+Note: If your work hours don't fall in above timings, Please update your preferred timing and we shall reassign the SR accordingly.
+
+If you need assistance during my off-shift hours, please call the Oracle HUB and request for reassignment of the SR.
+Contact number of HUB : http://www.oracle.com/support/contact.html
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[Notes]
+
+
+-- Informative Note: Advisor on a newer ORDS release --
+
+Hi krishna,
+
+We are investigating your current request, but wanted to let you know that a newer ORDS version is available for download at: https://download.oracle.com/otn_software/java/ords/ords-latest.zip
+
+You may find useful these links:
+
+- Release notes:
+https://www.oracle.com/tools/ords/ords-relnotes-2221.html
+
+- System Requirements:
+https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/22.2/ordig/installing-REST-data-services.html#GUID-F6A4F94A-D62F-4A35-A471-6306332DF522
+
+- ORDS Books:
+https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/22.2/books.html
+
+Thank you,
+Oracle Customer Support
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[ODM Research]
+
+
+== Useful Oracle REST Data Services Release 20.3 Documentation links ==
+
+Release notes: https://www.oracle.com/tools/ords/ords-relnotes-203.html
+ORDS Books: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/books.html
+Installation Guide: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/aelig/index.html
+Supported Java EE Application Servers: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/aelig/installing-REST-data-services.html#GUID-04A65471-5D4E-4C48-9054-51D8A894700B
+System Requirements: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/aelig/installing-REST-data-services.html#GUID-F6A4F94A-D62F-4A35-A471-6306332DF522
+ORDS Configuration Files: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/aelig/about-REST-configuration-files.html#GUID-9C3FE70B-AEBC-4149-9902-9E58DEFE6AEF
+ORDS API: https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/20.3/orrst/index.html
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[Notes]
+
+
+Your Service Request has been received. We will review and process the information provided.
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- Wednesday		[Information]
+
+
+My Oracle Support has performed a Knowledge search using your Service Request details (Summary, Error codes, Product) and located the following documents which may be related to your issue.
+
+Search Results
+============================================================================================
+61% - Doc ID 2865888.1 "A JNI error has occurred" Installing or Upgrading to ORDS 22.1
+61% - Doc ID 2373039.1 ORDS Shows 500 "Internal Server Error" Error-Reason Cannot Contain CRLF Charcters" Accessing a mod_plsql Procedure or APEX URL
+59% - Doc ID 2156766.1 How to Implement SSL with a Recognized Certificate Authority SSL Server Certificate with ORDS Standalone 3.0.5 and Higher
+56% - Doc ID 1536052.1 Oracle REST Data Services (ORDS) / APEX Listener General FAQ
+56% - Doc ID 2817360.1 Intermittent ORDS Internal Server Error 500 When Running an APEX URL that Contains Database Links
+
+
+ 	 	 
+ 	
+ 
+ 
+KRISHNA.KANHAYA@TERI.RES.IN	- Wednesday		[Customer Problem Description]
+
+
+Customer Problem Description
+---------------------------------------------------
+
+Problem Summary
+---------------------------------------------------
+Error find in ORDS INSTALLATION
+
+Problem Description
+---------------------------------------------------
+C:\App>cd ords
+
+C:\App\ords>java -jar ords.war
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+C:\App\ords>java -jar ords.war install
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+C:\App\ords>java -jar ords.war install
+'java' is not recognized as an internal or external command,
+operable program or batch file.
+
+Error Codes
+---------------------------------------------------
+'java' is not recognized as an internal or external command, operable program or batch file.
+
+Problem Category/Subcategory
+---------------------------------------------------
+1. Installation/a. How to install Oracle REST Data Services?
+
+Uploaded Files
+---------------------------------------------------
+
+
+Global Problem Definition Details
+---------------------------------------------------
+Question: Select the environment affected
+Answer: Production
+
+Question: What is the system or service status?
+Answer: Down
+
+Question: User Impacted
+Answer: Most / All users
+
+Question: What is the operational impact level?
+Answer: High
+
+Question: Which of these options best describes the general nature of the problem you want to solve?
+Answer: Installation Instructions
+
+Question: Choose the operation you need to perform
+Answer: How to Install ORDS for RESTFul Services Only
+
+Diagnosis: Review the following document on this issue:
+
+
+Read Note:2717593.1 How to Install ORDS for RESTFul Services Only
+
+
+If the above solution does not resolve your issue, we do not have enough information to suggest a solution based on your answers. Please follow the steps in the below document and upload ORDS log for further diagnostics to the SR:
+
+
+Read Note:2480081.1 SRDC - Collect Diagnostic Data to Troubleshoot ORDS related Issues
+
+
+We recommend saving this session as a draft Service Request (SR). Once data collection is complete, proceed with the next step to upload the requested data and submit the SR by clicking on the Next button.
+
+

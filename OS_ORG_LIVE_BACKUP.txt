@@ -1,0 +1,1796 @@
+CREATE OR REPLACE PACKAGE BODY ERPDEV.Os_Org IS
+FUNCTION Get_Approving_Authorities(
+   p_org_code             VARCHAR2,
+   p_empcode         IN   VARCHAR2,
+   p_approval_type   IN   VARCHAR2,
+   p_area_name  IN VARCHAR2,
+   p_role_reqd      IN CHAR,
+   o_route_no OUT  VARCHAR2
+  )
+  /*
+  --Input parameters
+   p_org_code :Code of the organisation
+   p_empcode  :Employee code of initiator
+   p_approval_type:Approval type
+   p_area_name:Used for PMS, In case the area of PI and project area differs then pass the area desc so that the approval can be area based.
+   p_role_reqd:Used for PMS, In case the area of PI and project area differs and the PI is the director for that area also then pass 'Y' so that the       approval can be role based. In other system pass this as 'N'
+ -- Output parameter: Route_number: Needed for fetching mail details from the table OS_APPROVAL_TYPE_DETAIL_STAGE
+                                                 Path : Needed for finding the next approval authority and stage
+-- Treat Employee from a diffrent area as a Normal employee in that area whatever may be his Role in his own area
+  */
+   RETURN VARCHAR2
+IS
+   v_ret               VARCHAR2 (10) := '';
+   v_emp_role_code     VARCHAR2 (25)  := '';
+   v_app_role_code     VARCHAR2 (25)  := '';
+   v_flowrole_code     VARCHAR2 (25)  := '';
+   v_org_level_code    VARCHAR2 (25)  := '';
+   v_flow_type         VARCHAR2 (25);
+   v_flow_level_code   VARCHAR2 (25);
+   v_appath_empcode    VARCHAR2 (50);
+   i                   NUMBER         := 0;
+   v_route             VARCHAR2 (25);
+   v_route_no          VARCHAR2 (25);
+   v_line_no           VARCHAR2 (25);
+   v_start_level         VARCHAR2 (25);
+   v_end_level           VARCHAR2 (25);
+   v_post                 NUMBER (38);
+   v_emp_area          VARCHAR2 (100);
+   v_app_string          VARCHAR2 (100);
+   flgRole               CHAR(1000):='N';
+   v_objectid            VARCHAR2(8000);
+  stg                             CHAR(100);
+  xadhead                          CHAR(400);
+  xemploc                         VARCHAR2(200);
+  act_emp                          CHAR(400);
+  /* Constants usede for admin head approval */
+  ADMINROUTETYPES CONSTANT VARCHAR2(200):='0003';
+  ADMINHEADCODE        CONSTANT  VARCHAR2(3):='008';
+-- Cursor to get the rule type for a specific approval type and employee level code
+   CURSOR emp
+   IS
+      SELECT A.empcode, A.org_level_code, A.ppost, b.rule_type,b.OBJECT_ID
+        FROM ORG_EMPLOYEE_MASTER A, OS_APPROVAL_TYPE_MASTER b
+       WHERE A.org_code = p_org_code
+         AND A.empcode = p_empcode
+         AND b.approval_type = p_approval_type;
+-- Cursour to get the rule type for a specific approval type and area level code
+CURSOR area_level
+IS
+SELECT A.AREACODE,b.rule_type,b.OBJECT_ID
+FROM         OS_ORGANISATION_VIEW A,OS_APPROVAL_TYPE_MASTER b
+WHERE    A.orgcode = p_org_code
+AND trim(Areaname)=trim(p_area_name)
+and loccode = p_org_code||xemploc
+AND b.Approval_type=p_Approval_type;
+-- Cursour to fine route number and route type at various levels based on organisation,division, area, location and employee level
+   CURSOR route_lv1
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 2)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv2
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 4)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv3
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = v_org_level_code
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_loc
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.office_location = lpad(v_post,2,0);
+   CURSOR route_emp
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND nvl(A.emp_code,'x') = nvl(p_empcode,'x');
+-- Cursor to get the role code of the employee
+   CURSOR get_role
+   IS
+      SELECT distinct decode( a.empcode,'2703','214','0024','001',(A.rolecode) ) Rolecode
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode
+         AND rolecode in ('002','003','004','005','008','206','001','213','214')
+         AND  A.rolecode = ( SELECT MAX(C.ROLE_CODE) FROM OS_ORGANISATION_ROLE C,OS_ROLE_MASTER D
+where C.role_code=D.role_code and C.acting_empcode =p_empcode and C.ACTIVE_FLAG='Y');
+-- Cursor to get the line no and start and end level
+   CURSOR app_route_det
+   IS
+      SELECT   A.line_no, A.start_level, A.end_level
+          FROM OS_APPROVAL_TYPE_DETAIL_ROUTE A
+         WHERE A.org_code = p_org_code
+           AND A.approval_type = p_approval_type
+           AND A.route_no = v_route_no
+           AND A.role_code = v_emp_role_code
+      ORDER BY line_no;
+-- cursor to find route detail
+   CURSOR route_det
+   IS
+        select role_code,sno
+        from
+        (
+         SELECT   A.role_code,rownum sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code<>'014'
+--      ORDER BY level;
+        union
+         SELECT   A.role_code,014 sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code='014')
+   ORDER BY sno;
+-- cursor to find approval flow
+   CURSOR get_app
+   IS
+      select empcode from
+      (
+      SELECT distinct empcode, rolecode
+        FROM os_organisation_role_emp_view A
+           WHERE trim(A.orgcode) =trim(p_org_code)
+         AND trim(A.areacode) =trim(v_org_level_code)
+         AND trim(rolecode) =trim(v_app_role_code)
+         and trim(rolecode)<>200          
+         --AND  A.rolecode = ( SELECT MAX(C.ROLE_CODE) FROM OS_ORGANISATION_ROLE C,OS_ROLE_MASTER D
+         ---where C.role_code=D.role_code and C.acting_empcode =p_empcode and C.ACTIVE_FLAG='Y')
+         union
+         select empcode,'200' rolecode  from org_employee_master
+         where empcode=p_empcode)
+         where rolecode=v_app_role_code;
+-- cursor to find approval flow for admin head
+  CURSOR get_App_lochead
+  IS SELECT Get_Admin_Head(p_empcode) empcode FROM dual;
+/* Main program begins here */
+BEGIN
+--DBMS_OUTPUT.put_line ('Entered project');
+SELECT exareacod,decode(lpad(ppost,2,'0'),77,'01', '04','01',lpad(ppost,2,'0') )INTO v_emp_area,xemploc FROM employee WHERE empcode=p_empcode;
+-- SELECT exareacod INTO v_emp_area FROM employee WHERE empcode='0727';
+--  IF trim(p_projectcode)<>'X' THEN
+--   SELECT exareacod INTO v_proj_area FROM PROJECT_MASTER WHERE project_Code=p_projectCode; -- RS
+--   END IF;
+   DBMS_OUTPUT.put_line (xemploc||'Entered project'||'Emp:'||v_emp_Area||'Parea name'||trim(p_area_name)); -- RS
+  IF p_area_name='X' THEN -- If taking at employee level
+   FOR r1 IN emp
+   LOOP
+      v_org_level_code := r1.org_level_code;
+      v_post := r1.ppost;
+     v_objectid:=r1.object_id;
+     DBMS_OUTPUT.put_line ('Entered emp: '||v_org_level_code||' Obj:'||v_objectid);
+   END LOOP;
+   ELSE
+   FOR r1 IN area_level -- Area level
+   LOOP
+      v_org_level_code := r1.areacode;
+      v_objectid:=r1.object_id;
+       dbms_output.Put_line( 'area ROLE code: '|| v_org_level_code);
+   END LOOP;
+   END IF;
+   FOR r1 IN route_lv1
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv2
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv3
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_loc
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_emp
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+  o_route_no:=v_route_no;
+   DBMS_OUTPUT.put_line ('Route TYPE: '||v_route||' No:'||v_route_no);
+ -- getting the basic role code
+ SELECT DISTINCT role_code INTO v_emp_role_code
+FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+WHERE b.APPROVAL_TYPE=p_approval_type
+AND A.ROUTE_TYPE=b.ROUTE_TYPE
+AND A.ROUTE_LEVEL='01';                     --'01' is basic route level
+ -- Checking for finding role
+ IF trim(p_area_name)='X' THEN
+   flgRole:='Y';
+ ELSE
+      IF  (p_role_reqd='Y') THEN
+      flgRole:='Y';
+    ELSE
+     flgRole:='N';
+    END IF;
+END IF;
+dbms_output.Put_line( 'flgPI'||flgRole||'Emp ROLE code: '||v_emp_role_code);
+
+---check for the employee 
+
+
+IF flgRole='Y' THEN
+  FOR r1 IN get_role
+   LOOP
+      v_emp_role_code := r1.rolecode;
+   END LOOP;
+   
+   
+  /* else  ----dated 15102015
+   
+   FOR r1 IN get_role
+   LOOP
+      v_emp_role_code := r1.rolecode;
+   END LOOP;
+   */
+END IF;
+
+----V_EMP_ROLE_CODE:='214' ;
+-- only for leave@RC (AC is also RCH for mumbai location- so in this case role should be rch)
+--/*
+if p_approval_type in ('0021','0022','0023','0024') and v_emp_role_code<>100 then
+
+    if p_empcode='2703' then
+    v_emp_role_code:='214';
+    else
+
+         Begin
+            SELECT max(A.rolecode)  into v_emp_role_code
+            FROM os_organisation_role_emp_view A
+           WHERE A.orgcode = p_org_code
+             AND A.empcode = p_empcode
+             AND rolecode in ('002','003','004','005','008','206','213','001','214');
+         Exception when no_data_found then
+            null;    
+         End;
+         end if;    
+end if;
+--*/
+dbms_output.Put_line( 'Emp ROLE code1: '||v_emp_role_code||flgRole);
+
+IF INSTR(ADMINROUTETYPES,v_route) >0 THEN
+SELECT Get_Admin_Head(p_empcode) INTO xadhead FROM dual;
+ IF xadhead=p_empcode THEN
+  v_emp_role_code:=ADMINHEADCODE;
+ ELSE
+   -- getting the basic role code
+   SELECT DISTINCT role_code INTO v_emp_role_code
+   FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+   WHERE b.APPROVAL_TYPE=p_approval_type
+   AND A.ROUTE_TYPE=b.ROUTE_TYPE
+   AND A.ROUTE_LEVEL='01';
+   END IF;
+END IF;
+dbms_output.Put_line( 'p_approval_type: '||p_approval_type);
+dbms_output.Put_line( 'Emp ROLE code: '||v_emp_role_code||flgRole);
+   i := 0;
+   FOR r1 IN app_route_det
+   LOOP
+      v_line_no := r1.line_no;
+      v_start_level := r1.start_level;
+      v_end_level := r1.end_level;
+     dbms_output.put_line('line--'||v_line_no||'--start level'||v_start_level);
+      FOR r2 IN route_det
+      LOOP
+         v_app_role_code := r2.role_code;
+        dbms_output.put_line('Object--'||p_APPROVAL_TYPE||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+         SELECT stage_id  INTO stg FROM OS_APPROVAL_TYPE_DETAIL_STAGE WHERE APPROVAL_TYPE=p_APPROVAL_TYPE  AND route_no= v_route_no  AND INSTR(rolecode,v_app_role_code)>0;
+        dbms_output.put_line('ADMINHEADCODE'||ADMINHEADCODE);
+        dbms_output.put_line('v_app_role_code'||v_app_role_code);
+        dbms_output.put_line('Stage'||stg);
+        IF v_app_role_code<>ADMINHEADCODE THEN
+             dbms_output.put_line('yo--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+            --p_org_code,v_org_level_code,v_app_role_code
+        if v_app_role_code in ('206','207') then
+        dbms_output.put_line('here---------');
+             begin
+                select  distinct acting_empcode into act_emp
+                from os_organisation_role a
+                where trim(org_code) = trim(p_org_code)
+                AND trim(org_level_code) =trim(p_org_code)||xemploc
+                AND trim(role_code) =trim(v_app_role_code)
+                and nvl(active_flag,'N')='Y'
+               ;
+             exception
+                when others then
+                    act_emp := null;
+             end;
+             dbms_output.put_line('act_emp '||act_emp);
+             if act_emp is not null then
+              if v_app_string is null then
+                v_app_string :=    act_emp||';'|| v_line_no||';'||stg  ;
+              else
+                v_app_string := v_app_string || ';' ||act_emp||';'|| v_line_no||';'||stg;
+              end if;
+             end if;
+             Else
+         FOR r3 IN get_app
+         LOOP
+                       dbms_output.put_line('YOGENDRA VALUE I '||i);
+             dbms_output.put_line('Object--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+            --IF i = 0  THEN--commented for TR @RC
+            if v_app_string is null then
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+            dbms_output.put_line(v_app_string);
+         END LOOP;
+         End if;
+    ELSE
+    FOR r3 IN get_App_lochead
+         LOOP
+         dbms_output.put_line('Entered admin head');
+            IF i = 0
+            THEN
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+         END LOOP;
+    END IF;
+      END LOOP;
+   END LOOP;
+   v_ret :=';'||trim( v_app_string)||';X'   ;
+  RETURN v_ret;
+END;
+FUNCTION Check_Approval_Type_Exception(xapproval_type IN CHAR,xpath IN VARCHAR2,xempcode IN CHAR,xarea IN CHAR) RETURN VARCHAR2
+AS
+/* This function is used  to check the validity of the return path of approval type. It inserts the error message in the table
+Input parameteres:
+  approval_type: Approval TYPE OF application
+  xpath: Path FOR the approval TYPE
+  xarea: proj_Areacod used for PMS
+Output parameters:
+  It returns 'Y' IF exceptionELSE 'N'
+*/
+res  CHAR(1):='N';
+BEGIN
+IF (xapproval_type='0005') OR (xapproval_type='0005') THEN -- For PMS  approval
+ IF INSTR(xpath,'E')=0 THEN
+    Os_Pms.Get_Pms_Check_Excep(xarea,xempcode,res);
+ ELSE
+   res:='N';
+ END IF;
+END IF;
+RETURN(res);
+END;
+PROCEDURE Get_Next_Authority_Stage(xpath IN VARCHAR2,auth OUT CHAR,stg OUT CHAR)
+IS
+BEGIN
+auth:= SUBSTR(xpath,INSTR(xpath,';')+1,4);
+stg:=SUBSTR(xpath,INSTR(xpath,';')+9,1);
+END;
+PROCEDURE Os_Form_Submission(xtrans_no IN VARCHAR2,xempcode IN CHAR,xauth IN CHAR,xstg IN CHAR,xroute_no IN VARCHAR2,xapproval_type IN VARCHAR2,xkey IN VARCHAR2,xkeyparam VARCHAR2)
+AS
+/* procedure to inser in form submission*/
+xsubno VARCHAR2(11);
+xobjectid VARCHAR2(8);
+xstgdesc  VARCHAR2(255);
+BEGIN
+xsubno:= Next_Value('SUB_NO',2018);
+     dbms_output.put_line('Form ssubmis problem'||xapproval_type||'-'||xstg||'-'||xroute_no);
+     
+SELECT object_id,STAGE_DESC INTO xobjectid,xstgdesc FROM OS_APPROVAL_TYPE_DETAIL_STAGE
+WHERE approval_type=xapproval_type AND stage_id= nvl(xstg,'B')   ----------------   abhinav
+ AND route_no=nvl(xroute_no,'01');
+     Form_Submission_Clear(xkeyparam,xkey,'%');
+ INSERT INTO FORM_SUBMISSION(trans_id,sub_no,empcode,form_source,
+  object_id,stage_id,key_param,key_value,sub_desc,sub_date,process_flag)
+  VALUES(xtrans_no,xSubNo,xauth,xempcode,xObjectId,xstg,xkeyparam,xkey,xStgDesc,SYSDATE,'H'); -- H for hold
+--dbms_output.put_line('Form ssubmis problem1'||xapproval_type||'-'||xstg||'-'||xroute_no);
+COMMIT;
+END;
+PROCEDURE Os_Form_Submission_TS(xtrans_no IN VARCHAR2,xempcode IN CHAR,xauth IN CHAR,xstg IN CHAR,xroute_no IN VARCHAR2,xapproval_type IN VARCHAR2,xkey IN VARCHAR2,xkeyparam VARCHAR2)
+AS
+/* procedure to inser in form submission*/
+xsubno VARCHAR2(11);
+xobjectid VARCHAR2(8);
+xstgdesc  VARCHAR2(255);
+BEGIN
+xsubno:= Next_Value('SUB_NO',2018);
+     --dbms_output.put_line('Form ssubmis problem'||xapproval_type||'-'||xstg||'-'||xroute_no);
+     
+SELECT object_id,STAGE_DESC INTO xobjectid,xstgdesc FROM OS_APPROVAL_TYPE_DETAIL_STAGE
+WHERE approval_type=xapproval_type AND stage_id=nvl(xstg,'B') 
+AND route_no=NVL(xroute_no,'01');
+     Form_Submission_Clear(xkeyparam,xkey,'%');
+ INSERT INTO FORM_SUBMISSION(trans_id,sub_no,empcode,form_source,
+  object_id,stage_id,key_param,key_value,sub_desc,sub_date,process_flag)
+  VALUES(xtrans_no,xSubNo,xauth,xempcode,xObjectId,xstg,xkeyparam,xkey,xStgDesc,SYSDATE,'F'); -- H for hold
+--dbms_output.put_line('Form ssubmis problem1'||xapproval_type||'-'||xstg||'-'||xroute_no);
+COMMIT;
+END;
+PROCEDURE Os_Insert_Mails(xtrans_no IN VARCHAR2,xinit IN CHAR,xempcode IN CHAR,xauth IN CHAR,xstg IN CHAR,xroute_no IN VARCHAR2,xapproval_type IN VARCHAR2,xkey IN VARCHAR2,email_cc IN VARCHAR2 DEFAULT  'X',cvar1 IN VARCHAR2,cvar2 IN VARCHAR2,cvar3 IN VARCHAR2,cvar4 IN VARCHAR2,cvar5 IN VARCHAR2,xlauth IN VARCHAR2)
+AS
+/* procedure to send mails*/
+xmsg VARCHAR2(4000):='X';
+xsubj VARCHAR2(200);
+xmailcc  VARCHAR2(200);
+xmailbc  VARCHAR2(200);
+xmailcc1  VARCHAR2(200);
+xmailto    VARCHAR2(200):='X';
+xmailfromid   VARCHAR2(200);
+xmailfrmtxt VARCHAR2(200);
+xmailfrm CHAR(4);
+mailfromid   VARCHAR2(200);
+mailfrmtxt VARCHAR2(200);
+mailfrm CHAR(4);
+xdata            VARCHAR2(40);
+xfixed_to VARCHAR2(20);
+xotherCC  VARCHAR2(100);
+xlauthid  VARCHAR2(100);
+p_divcode varchar2(10);
+tempcode varchar2(4);
+acode varchar2(2);
+cnt_webess number:=0;
+EVENT_FILE_PATH VARCHAR2(50):=NULL;
+v_tr_ver varchar2(5);
+v_sub_mail varchar2(100); v_year varchar2(5);
+BEGIN
+EVENT_FILE_PATH:=NULL;
+-- Getting the last authority email
+IF  trim(NVL(xlauth,'X'))<>'X' THEN
+  --xlauthid:=NVL(Genemail(xlauth),'X');
+  xlauthid:=NVL(get_email(xlauth),'X');
+ELSE
+  xlauthid:='X';
+ END IF;
+ --DBMS_OUTPUT.PUT_LINE('APP TYPE '||xapproval_type||' STAGE: '||xstg||'ROUTE NO :'||xroute_no||'cvar2'||cvar2);
+-- Getting the message and the fixed ids depenging on approval type, route and stage
+SELECT MAIL_MSG,MAIL_SUBJ,fixed_cc,fixed_bc,fixed_From,fixed_From_empcode,fixed_from_Text,NVL(fixed_to,'X'),NVL(OTHER_CC,'X')
+INTO xmsg,xsubj,xmailcc1,xmailbc,xmailfromid,xmailfrm,xmailfrmtxt,xfixed_To,xothercc FROM OS_APPROVAL_TYPE_DETAIL_STAGE
+WHERE rtrim(ltrim(approval_type))=rtrim(ltrim(xapproval_type)) AND rtrim(ltrim(stage_id))=rtrim(ltrim(xstg)) AND rtrim(ltrim(route_no))=rtrim(ltrim(xroute_no));
+--Subject creation
+/*
+BEGIN
+   SELECT EMPCODE  INTO TEMPCODE FROM FORM_SUBMISSION WHERE
+   form_source=xempcode and   object_id='Lev_App ' AND process_flag='F'
+   and KEY_VALUE LIKE '%'||cVar1;
+   EXCEPTION
+   WHEN NO_DATA_FOUND THEN
+   TEMPCODE:='1111';
+END ;
+*/
+
+/*
+if xapproval_type in ('0001','0002') and xstg='B' then
+    
+    Begin
+        select count(*) into cnt_webess from webess_app where approval_type in ('0001','0002') and app_no=substr(cvar4,5,5);
+    Exception
+        When No_Data_found then
+            cnt_webess:=0;
+    End ;
+end if;    
+
+if xapproval_type in ('0002') and xstg='C' then
+    
+    Begin
+        select count(*) into cnt_webess from webess_app where approval_type in ('0002') and app_no=cvar1;
+    Exception
+        When No_Data_found then
+            cnt_webess:=0;
+    End ;
+end if;    
+
+if xapproval_type in ('0007','0008','0025','0026','0027','0028') then
+    Begin   
+        select count(*) into cnt_webess from webess_app where RTRIM(UPPER(approval_type)) = 'TRAVEL' and app_no=cvar1;
+    Exception
+        When No_Data_found then
+            cnt_webess:=0;
+    End ;
+end if;
+
+If cnt_webess>0 then
+        SELECT REPLACE(xmsg,'(link)','webess')  INTO xmsg FROM dual;
+else
+        SELECT REPLACE(xmsg,'(link)','ess')  INTO xmsg FROM dual;
+end  if;
+
+*/
+   IF INSTR(xsubj,'(cvar1)')>0 THEN
+   SELECT REPLACE(xsubj,'(cvar1)',cvar1)  INTO xsubj FROM dual;
+   END IF;
+   IF INSTR(xsubj,'(cvar2)')>0 THEN
+   SELECT REPLACE(xsubj,'(cvar2)',cvar2)  INTO xsubj FROM dual;
+   END IF;
+     IF INSTR(xsubj,'(cvar3)')>0 THEN
+   SELECT REPLACE(xsubj,'(cvar3)',XAUTH)  INTO xsubj FROM dual;
+   END IF;
+     IF INSTR(xsubj,'(cvar4)')>0 THEN
+   SELECT REPLACE(xsubj,'(cvar4)',cvar4)  INTO xsubj FROM dual;
+   END IF;
+     IF INSTR(xsubj,'(cvar5)')>0 THEN
+   SELECT REPLACE(xsubj,'(cvar5)',SUBSTR(xtrans_no,1,4))  INTO xsubj FROM dual;
+   END IF;
+   IF INSTR(xsubj,'(sender)')>0 THEN
+   SELECT REPLACE(xsubj,'(sender)',SUBSTR(trim(Get_Fullname(xempcode)),1,30))  INTO xsubj FROM dual;
+   END IF;
+
+             
+          if xapproval_type in ('0002','0001') then
+            ----------on dated 26082016-- for leave approval subject---
+             BEGIN
+            select '(from '||to_char(LEVSTARTSON,'DD-Mon-YY')||' to '|| to_char(LEVENDSON,'DD-Mon-YY')||' '||STARTANBNSTATUS||' ) ' into v_sub_mail 
+            from leave_application where year||LEVAPPNO=cvar4;
+            
+            EXCEPTION WHEN OTHERS THEN 
+            v_sub_mail:=NULL;
+            END;
+
+            IF INSTR(xsubj,'(cvars)')>0 THEN
+            SELECT REPLACE(xsubj,'(cvars)',v_sub_mail)  INTO xsubj FROM dual;
+            END IF;
+            end if;
+            
+           
+   
+
+
+
+-- Message creation
+
+   IF INSTR(xmsg,'(cvar1)')>0 THEN
+   SELECT REPLACE(xmsg,'(cvar1)',cvar1)  INTO xmsg FROM dual;
+   END IF;
+   IF INSTR(xmsg,'(cvar2)')>0 THEN
+   SELECT REPLACE(xmsg,'(cvar2)',cvar2)  INTO xmsg FROM dual;
+   END IF;
+
+
+if xapproval_type not in ('0041','0042') then  
+        EVENT_FILE_PATH:=NULL;
+        IF INSTR(xmsg,'(cvar3)')>0 THEN
+            SELECT REPLACE(xmsg,'(cvar3)',XAUTH)  INTO xmsg FROM dual;
+        END IF;
+        
+        IF INSTR(xmsg,'(cvar4)')>0 THEN
+            SELECT REPLACE(xmsg,'(cvar4)',cvar4)  INTO xmsg FROM dual;
+        END IF;   
+        
+        IF INSTR(xmsg,'(cvar5)')>0 THEN
+         SELECT REPLACE(xmsg,'(cvar5)',SUBSTR(xtrans_no,1,4))  INTO xmsg FROM dual;
+        END IF;
+        
+   Else
+        
+      /*  if xapproval_type='0041' then
+            EVENT_FILE_PATH :='\EVENT\CHECKLIST.DOC';*/---commeneted by sadaul on 09/06/2022
+            if xapproval_type='0042' then    
+            EVENT_FILE_PATH :='\EVENT\CHECKLIST_TU.XLSX';
+        end if;
+        
+        IF INSTR(xmsg,'(cvar3)')>0 THEN
+            SELECT REPLACE(xmsg,'(cvar3)',cvar3)  INTO xmsg FROM dual;
+        END IF;
+        
+        IF INSTR(xmsg,'(cvar4)')>0 THEN
+            SELECT REPLACE(xmsg,'(cvar4)',cvar4)  INTO xmsg FROM dual;
+        END IF;
+        
+        IF INSTR(xmsg,'(cvar5)')>0 THEN
+         SELECT REPLACE(xmsg,'(cvar5)',cvar5)  INTO xmsg FROM dual;
+        END IF;
+        
+   End if;
+     IF INSTR(xmsg,'(cvar6)')>0 THEN
+         SELECT REPLACE(xmsg,'(cvar6)',xauth)  INTO xmsg FROM dual;
+      End if;
+   IF INSTR(xmsg,'(sender)')>0 THEN
+   SELECT REPLACE(xmsg,'(sender)',SUBSTR(trim(Get_Fullname(xempcode)),1,30))  INTO xmsg FROM dual;
+   END IF;
+-- Mail from
+   /*
+   if xempcode in ('0727','2039') then
+    insert into temp_cur values(XSTG,TEMPCODE,XAUTH);
+   end if;
+  */
+  mailfrm:=NVL(xmailfrm,xempcode);
+  --mailfromid:=NVL(xmailfromid,Genemail(xempcode));
+  mailfromid:=NVL(xmailfromid,Get_email(xempcode));
+  
+  mailfrmtxt:=NVL(xmailfrmtxt,SUBSTR(trim(Get_Fullname(xempcode)),1,35));
+ -- Mail to next authority
+ IF trim(Xfixed_to)='X' THEN
+--xmailto:=Genemail(xauth);
+xmailto:=Get_email(xauth);
+ELSE
+ IF (xfixed_to='xinit') THEN
+  xmailto:=Get_email(xinit);
+ -- xmailto:=Genemail(xinit);
+END IF;
+END IF;
+-- Checking for fixed CC ids
+--xmailcc:=Genemail(xempcode); -- Sending a CC to submittor ** Commented by RS
+IF trim(email_cc)<>'X' THEN
+xmailcc:=trim(xmailcc)||';'||trim(email_cc);
+END IF;
+IF  trim(xmailcc1)<>'X' THEN -- In case some fixedd CC is defined
+  xmailcc:=trim(xmailcc)||';'||trim(xmailcc1);
+END IF;
+-- Checking for other CCs
+IF INSTR(xothercc,'xinit')>0 THEN
+  --IF INSTR(xmailto,trim(Genemail(xinit)))=0 AND INSTR(xmailcc,trim(Genemail(xinit)))=0 THEN
+  IF INSTR(xmailto,trim(Get_email(xinit)))=0 AND INSTR(xmailcc,trim(Get_email(xinit)))=0 THEN
+      xmailcc:=trim(xmailcc)||';'||trim(Get_email(xinit));
+END IF;
+END IF;
+IF INSTR(xothercc,'xlauth')>0  AND (xlauthid<>'X' )THEN
+  IF INSTR(xmailto,trim(xlauthid))=0 AND INSTR(xmailcc,trim(xlauthid))=0 THEN
+      xmailcc:=trim(xmailcc)||';'||trim(xlauthid);
+END IF;
+END IF;
+begin
+SELECT DIVCOD INTO P_DIVCODE from employee_master where empcode=mailfrm;
+exception
+when no_data_found then
+p_divcode:=null;
+END;
+------------------0147-----------------------------------
+if xapproval_type='0002' and p_divcode='02' and xmailto  like '%subhak@teri.res.in%' THEN
+   if mailfrm<>'0147' then
+         xmailcc:=xmailcc||';'||'akumar@teri.res.in';
+   end if;
+end if;
+
+
+if xapproval_type='0002' and p_divcode='01' and xmailto  like '%subhak@teri.res.in%' THEN
+   if mailfrm<>'0682' then
+         xmailcc:=xmailcc||';'||'tspanwar@teri.res.in';
+   end if;
+end if;
+--/*
+    select areacod into acode from employee where empcode=xinit;
+    if xapproval_type in ('0001','0002') and p_divcode='13' and acode='CI' and xmailto  like '%subhak@teri.res.in%' THEN
+    
+        if mailfrm<>'2875' then
+         xmailcc:=xmailcc||';'||'avanche@teri.res.in';
+        end if;
+   
+    end if;
+--*/
+
+if xapproval_type='0016' and xstg in ('F','G') and p_divcode='02'   THEN
+   xmailcc:=xmailcc||';'||'akumar@teri.res.in';
+end if;
+if xapproval_type='0016' and xstg in ('F','G') and p_divcode='01'   THEN
+   xmailcc:=xmailcc||';'||'tspanwar@teri.res.in';
+end if;
+
+        if xapproval_type IN ('0041','0042') and xstg='C'  then
+                xmailto:=xfixed_To;
+        end if;
+
+        if xapproval_type IN ('0041','0042') and xstg='D'  then
+            xmailto:=email_cc;
+            xmailcc:=Null;
+            
+        end if;
+
+--insert into ntemp values(p_divcode,xapproval_type,xstg);
+-- Inserting in ERP mails
+IF xmailto<>'X'  AND xmsg<>'X'  and xmailto<>'evramc@teri.res.in' and xmailto <>'ravik@teri.res.in' THEN
+
+  if mailfrm  = substr(mailfromid,1,4) then
+  mailfromid :='gramadmin@teriuniversity.ac.in';  
+  end if;
+
+
+ IF xapproval_type  in ('0007' ,'0008','0025' ,'0026','0027','0028','0053','0054','0055')  THEN
+     
+         IF INSTR(xmsg,'(cvar15)')>0 THEN
+            
+            
+            select nvl(tr_version,'O') into v_tr_ver from travel_requisition_master where TR_NO = cvar1;
+            
+            if v_tr_ver  ='O' then
+            
+            SELECT REPLACE(xmsg,'(cvar15)','TRApproval.aspx')  INTO xmsg FROM dual;
+            
+            elsif v_tr_ver  ='N' then
+            
+            SELECT REPLACE(xmsg,'(cvar15)','TRApprovalNew.aspx')  INTO xmsg FROM dual;
+            end if;
+            
+        END IF;
+     
+     end if;
+--------------------03012017--------------------
+ if xapproval_type in ('0002','0001','0044','0045','0046','0047','0048') then
+  ----------on dated 26082016-- for leave approval subject---
+             BEGIN
+            select year  into v_year
+            from leave_application where year||LEVAPPNO=cvar4;
+            
+            
+                     IF INSTR(xmsg,'(cvar5)')>0 THEN
+                     SELECT REPLACE(xmsg,'(cvar5)',v_year)  INTO xmsg FROM dual;
+                    END IF;
+                    
+                    
+            EXCEPTION WHEN OTHERS THEN 
+            v_year:=NULL;
+            END;
+
+          
+ 
+ end if;
+ ----------------------------------------------------------------------------------------------
+ 
+
+
+ IF xapproval_type  in ('0043') then 
+  
+  INSERT INTO ERP_MAILS(TRANS_ID,empcode,mail_from,mail_From_text,mail_to,mail_to_cc,mail_to_bc,mail_message,mail_Subject,send_email,ATTACH_FILE1)
+   VALUES(xtrans_no,mailfrm,mailfromid,mailfrmtxt,xmailto,xmailcc,xmailbc,xmsg,xsubj,'Y',EVENT_FILE_PATH); -- H for hold
+   else
+   INSERT INTO ERP_MAILS(TRANS_ID,empcode,mail_from,mail_From_text,mail_to,mail_to_cc,mail_to_bc,mail_message,mail_Subject,send_email,ATTACH_FILE1)
+   VALUES(xtrans_no,mailfrm,mailfromid,mailfrmtxt,xmailto,xmailcc,xmailbc,xmsg,xsubj,'H',EVENT_FILE_PATH); -- H for hold
+   
+   end if;
+   
+COMMIT;
+END IF;
+END;
+PROCEDURE Os_Update_Transactions(xtrans_no IN VARCHAR2)
+AS
+/* To update transactions */
+xsubno VARCHAR2(11);
+xobjectid VARCHAR2(8);
+xstgdesc  VARCHAR2(255);
+BEGIN
+-- Updating form submission
+UPDATE FORM_SUBMISSION
+SET process_flag='F'
+WHERE TRANS_ID=xtrans_no
+AND process_Flag='H';
+COMMIT;
+--updating erp_mails
+UPDATE ERP_MAILS
+SET send_email='Y'
+WHERE TRANS_ID=xtrans_no
+AND send_email='H';
+insert into ess_mails
+select a.EMPCODE, a.MAIL_FROM, a.MAIL_FROM_TEXT, a.MAIL_TO, a.MAIL_TO_TEXT, a.MAIL_TO_CC,
+a.MAIL_TO_CC_TEXT, a.MAIL_TO_BC, a.MAIL_TO_BC_TEXT, a.MAIL_SUBJECT, a.MAIL_MESSAGE,
+a.MSG_FILE, a.ATTACH_FILE, a.DISTRIBUTE_DATE, a.FAX_NO, a.SEND_EMAIL, a.SEND_FAX
+, a.MAIL_STAGE, a.UPDATED_ON, a.UPDATED_BY, a.MDL_CODE, a.MAIL_TO1, a.MAIL_TO_CC1
+, a.MAIL_TO_BC1, a.TRANS_ID,b.OBJECT_ID||STAGE_ID,b.key_value
+from erp_mails a,form_submission b
+where a.TRANS_ID=b.TRANS_ID and a.trans_id=xtrans_no;
+COMMIT;
+EXCEPTION
+WHEN NO_DATA_FOUND THEN
+   dbms_output.put_line('No data FOUND');
+END;
+PROCEDURE Get_Approval_Process(xorg_Code IN VARCHAR2,xapproval_type IN VARCHAR2,xsubmission_type IN CHAR,xinit IN CHAR,xempcode IN CHAR,xarea IN CHAR DEFAULT 'X', xrole IN CHAR DEFAULT 'N',xkey IN VARCHAR2,xkeyparam IN VARCHAR2,xemail IN VARCHAR2 DEFAULT 'X',cvar1 IN VARCHAR2 DEFAULT 'X',cvar2 IN VARCHAR2  DEFAULT 'X',cvar3 IN VARCHAR2 DEFAULT 'X',cvar4 IN VARCHAR2 DEFAULT 'X',cvar5 IN VARCHAR2 DEFAULT 'X',errcode OUT CHAR,o_auth OUT VARCHAR2,o_stg OUT CHAR,o_trans OUT  VARCHAR2)
+AS
+/* Input parameters
+   xorg_code:Code of the organisation
+   xapproval_type:Approval type
+   xsubmission_type : 'S' for submit, 'B' Send Back
+   xinit: Employee code of the initiator of the approval process
+   xempcode: Employee code of the person who is submitting
+   xarea: Used for PMS, In case the area of PI and project area differs then pass the project areacode so that the approval can be area based. In other system pass this as X
+   xrole:Used for PMS, In case the area of PI and project area differs and the PI is the director for that area also then pass 'Y' so that the       approval can be role based. In other system pass this as 'N'
+   xkey:Value  to be inserted in form_submission for key_value for e.g. Project_code value like '2005CA03' in PMS
+   xkeyparam: Name of the field to be inserted as key in form_Submission for  e.g. Project_code
+   xemail:Any email that requires CC depending on some condition that cannot be captured here
+   cvar1,cvar2,cvar3,cvar4,cvar5: Input parameters for mail subject and data
+*/
+v_path      VARCHAR2(100):='';
+x_path      VARCHAR2(100):='';
+v_err_code  VARCHAR2(1):='N';
+v_Area_d    VARCHAR2(50):='X';
+xapprauth   CHAR(4):='';
+xlapprauth   CHAR(4):='X'; -- last approved authority for send back
+xstg        CHAR(1);
+Brole     VARCHAR2(25);
+trans_no VARCHAR2(12);
+xrouteno VARCHAR2(5);
+email_cc VARCHAR2(100);
+chkapprtype varchar2(400):='0001;0003;0007;0008;0009;0010;0011;0012;0022;0025;0026;0027;0028;0029;0030;0031;0032;0033;0034;0035;0036;0037;0038;0039;0043;0044;0045;0046;0047;0048;0049;0050;0051;0052;0053;0054;0055;0059;0056;0057;0058;0060;0061';yr char(4):=to_char(sysdate,'YYYY');
+xppost  number(2);
+ctnp number:=0;
+xnp_code varchar2(4);--nodal person empcode   '  '||
+BEGIN
+
+-- In case of banglore project for halpeth
+IF trim(xemail) <> 'X' THEN
+email_cc :=xemail;
+END IF;
+dbms_output.put_line('  xemail   '||xemail);
+dbms_output.put_line('  xinit '||xinit);
+SELECT to_number(PPOST) into xppost from employee where empcode=xinit;
+
+IF trim(xarea)<>'X' THEN
+ SELECT TRIM(name) INTO v_Area_D FROM os_organisation_structure WHERE proj_areacod=xarea  and TO_NUMBER(LOC_CODE)=xppost and  NVL(ACTIVE_FLAG,'N')='Y';
+END IF;
+
+IF xsubmission_type='S' THEN ---- Submitting for approval
+-- getting the approval path as if now
+dbms_output.put_line('V path FROM mailn'||xinit||'-'||v_area_d);
+   v_path:=Os_Org.Get_Approving_Authorities(xorg_code,xinit,xapproval_type,v_area_d,xrole,xrouteno);
+   dbms_output.put_line('xV path FROM mail'||v_path);
+-- Checking for exceptions
+   errcode:=Os_Org.Check_Approval_Type_Exception(xapproval_type,v_path,xempcode,xarea);
+IF (xinit=xempcode) THEN
+dbms_output.put_line('YOGENDRA STEP stag 1'||xstg);
+     Os_Org.Get_Next_Authority_Stage(v_path,xapprauth,xstg);
+   ELSE
+   dbms_output.put_line('YOGENDRA STEP stag 2'||xstg);
+   Os_Org.Get_Next_Authority_Stage(v_path,xlapprauth,xstg);
+   if instr(chkapprtype,xapproval_type)>0 then -- PR  and TR
+   dbms_output.put_line('    vpath1   '||v_path||'  xstg  '||xstg);
+   select substr(v_path,instr(v_path,SUBSTR(v_path,INSTR(v_path,xempcode)+8,1),-1,1)+1) into x_path from dual;
+   else
+   dbms_output.put_line('    vpath2   '||v_path||'  xstg  '||xstg);
+   SELECT SUBSTR(v_path,INSTR(v_path,xempcode)+9,10)  INTO x_path FROM Dual;
+   end if;
+   dbms_output.put_line('    x_path   '||x_path||'  xstg  '||xstg);
+   Os_Org.Get_Next_Authority_Stage(x_path,xapprauth,xstg);
+   END IF;
+   ELSIF xsubmission_type='B' THEN -- Send back
+   errcode:='N';
+   SELECT MIN(stage_id) INTO xstg
+   FROM OS_APPROVAL_TYPE_DETAIL_STAGE
+   WHERE Approval_type=xapproval_type;
+   dbms_output.put_line('YOGENDRA STEP stag 5'||xstg); 
+-- Getting the last authority who approved
+    v_path:=Os_Org.Get_Approving_Authorities(xorg_code,xinit,xapproval_type,v_area_d,xrole,xrouteno);
+    dbms_output.put_line('Send path FROM mail'||v_path);
+    dbms_output.put_line('YOGENDRA STEP stag 6 '||xstg);
+   Os_Org.Get_Next_Authority_Stage(v_path,xlapprauth,xstg);
+    IF   (xlapprauth<>'X') AND (xlapprauth<>xempcode) AND (xlapprauth<>xinit) THEN
+     IF trim(email_cc)<>'X' THEN
+      email_cc:=email_cc||';'||trim(Get_email(xlapprauth));
+     ELSE
+      email_cc:= trim(Get_email(xlapprauth));
+      END IF;
+    END IF;
+    dbms_output.put_line('YOGENDRA STEP stag 7 '||xstg);
+    if xapproval_type in ('0001','0002') then
+        null;
+        
+        
+        -- CHECKING FOR Nodal person
+           select count(*) into ctnp
+           from
+           (
+            select d.empcode np_code,d.loccode,d.email,d.locdesc --into  xnp_code,xloccode,xNpemail,xlocdesc
+            from employee c,
+            (select a.empcode,a.loccode,b.email,b.locdesc  from DEAN_AC_NODAL_DETAILS a,employee b where
+            a.empcode=b.empcode and
+            a.loccode=b.loccode
+            and a.RESCODE='NP' AND
+            a.ACTIVE='Y') d
+            where c.loccode=d.loccode
+            and c.empcode=xinit
+            );
+            
+                if ctnp>0 then
+                    select d.empcode np_code into  xnp_code   from employee c,
+                    (select a.empcode,a.loccode,b.email,b.locdesc  from DEAN_AC_NODAL_DETAILS a,employee b where
+                    a.empcode=b.empcode and
+                    a.loccode=b.loccode
+                    and a.RESCODE='NP' AND
+                    a.ACTIVE='Y') d
+                    where c.loccode=d.loccode
+                    and c.empcode=xinit;
+                    -- Sending CC to nodal person
+                    IF trim(email_cc)<>'X' THEN
+                        email_cc:=email_cc||';'||trim(Get_email(xnp_code));
+                    ELSE
+                        email_cc:= trim(Get_email(xnp_code));
+                    END IF;
+                end if;
+            
+    end if;
+   xlapprauth:='X';
+   xstg:='A';
+  xapprauth:=xinit;
+  dbms_output.put_line('YOGENDRA STEP stag 9 '||xstg);
+END IF;
+dbms_output.put_line('nnnnnn111'||errcode);
+dbms_output.put_line('YOGENDRA STEP stag 8 '||xstg);
+IF errcode='N' THEN
+dbms_output.put_line('nnnnnn'||yr);
+ trans_no := Next_Value('TRANS_ID',yr);
+dbms_output.put_line('YOGENDRA STEP x1'||trans_no||','||xinit||','||xapprauth||','||xstg||','||xrouteno||','||xapproval_type||','||xkey||','||xkeyparam||',');
+dbms_output.put_line('YOGENDRA STEP stag '||xstg);
+-- create procedure to insert in form submission
+Os_Org.Os_Form_Submission(trans_no,xinit,xapprauth,xstg,xrouteno,xapproval_type,xkey,xkeyparam);
+          dbms_output.put_line('YOGENDRA STEP 2');
+-- create procedure to insert in erpmails
+--Os_Org.Os_Insert_Mails(trans_no,xinit,xempcode,xapprauth,xstg,xrouteno,xapproval_type,xkey,email_cc ,cvar1,cvar2,cvar3,cvar4,cvar5,xlapprauth);
+--CHANGE BY YOGENDRA 07/08/2006 FOR MAIL GENERATION
+Os_Org.Os_Insert_Mails(trans_no,xinit,xempcode,xapprauth,xstg,xrouteno,xapproval_type,xkey,email_cc ,cvar1,cvar2,cvar3,cvar4,xapprauth,xlapprauth);
+END IF;
+-- Assigning output paramters
+dbms_output.put_line(xrouteno);
+o_trans:=trans_no;
+o_auth :=xapprauth;
+o_stg:=xstg;
+END;
+procedure os_pi_submitting(xapproval_type in char,xinit in char,darea in char default 'X',drole in char default 'N',route_Desc out char) as
+x_path varchar2(200);
+v_path varchar2(200);
+xrouteno char(2);
+stg varchar(2):='';
+xorg_Code varchar2(2):='01';
+/* This procedure is used to handle in case PI is submitting. This procedure provides the next approval empoode,stage and route no concatenated  */
+begin
+v_path:=Os_Org.Get_Approving_Authorities(xorg_code,xinit,xapproval_type,darea,drole,xrouteno);
+dbms_output.put_line(v_path);
+v_path:=substr(v_path,1,instr(v_path,';99')-5);
+select decode(instr(v_path,xinit),0,substr(v_path,1), substr(v_path,instr(v_path,xinit,-1)+9)) into x_path
+from dual;
+--select substr(v_path,instr(v_path,stg,-1,1)+1) into x_path from dual;
+route_Desc:=substr(trim(x_path),2,5)||substr(trim(x_path),10,2)||xrouteno;
+dbms_output.put_line('101'||route_desc);
+end;
+procedure os_pi_submitting1(xapproval_type in char,xinit in char,darea in char default 'X',drole in char default 'N',route_Desc out char) as
+x_path varchar2(200);
+v_path varchar2(200);
+xrouteno char(2);
+stg varchar(2):='B';
+xorg_Code varchar2(2):='01';
+/* This procedure is used to handle in case PI is submitting. This procedure provides the next approval empoode,stage and route no concatenated  */
+begin
+v_path:=Os_Org.Get_Approving_Authorities(xorg_code,xinit,xapproval_type,darea,drole,xrouteno);
+dbms_output.put_line(v_path);
+select substr(v_path,instr(v_path,stg,-1,1)+1) into x_path from dual;
+route_Desc:=substr(trim(x_path),2,5)||substr(trim(x_path),10,2)||xrouteno;
+end;
+procedure os_pi_submitting2(xapproval_type in char,xinit in char,darea in char default 'X',drole in char default 'N',xsubemp in char,route_Desc out char) as
+x_path varchar2(200);
+v_path varchar2(200);
+xrouteno char(2);
+stg varchar(2):='B';
+xorg_Code varchar2(2):='01';
+xstg  char(1):='B';
+ct number(2):=0; -- for checking if exist
+/* This procedure is used to handle in case PI is submitting. This procedure provides the next approval empoode,stage and route no concatenated  */
+begin
+dbms_output.put_line(xorg_code||'-'||xinit||'-'||xapproval_type||'-'||darea||'-'||drole||'-'||xrouteno);
+v_path:=Os_Org.Get_Approving_Authorities(xorg_code,xinit,xapproval_type,darea,drole,xrouteno);
+dbms_output.put_line('First'||v_path);
+dbms_output.put_line('xrouteno'||xrouteno);
+v_path:=substr(v_path,1,instr(v_path,';99')-5);
+dbms_output.put_line(v_path);
+select instr(v_path,xinit) into ct from dual;
+if xinit = '1493' and xapproval_type in ('0007','0008') then --condition added for 1493
+ct:=0;
+end if;
+if ct>0 then
+select nvl(substr(v_path,instr(v_path,xinit,-1)+8,1),'X') into xstg from dual;
+else
+select instr(v_path,xsubemp) into ct from dual;
+if ct>0 then
+select nvl(substr(v_path,instr(v_path,xsubemp,-1)+8,1),'X') into xstg from dual;
+else
+xstg:='B';
+end if;
+end if;
+dbms_output.put_line('stg'||xstg);
+select substr(v_path,instr(v_path,xstg,-1)+1) into x_path from dual;
+route_Desc:=substr(trim(x_path),2,5)||substr(trim(x_path),10,2)||xrouteno;
+end;
+FUNCTION Get_Approving_Authorities_prj(
+   p_org_code             VARCHAR2,
+   p_empcode         IN   VARCHAR2,
+   p_approval_type   IN   VARCHAR2,
+   p_area_name  IN VARCHAR2,
+   p_role_reqd      IN CHAR,
+   p_prj_code in char,
+   o_route_no OUT  VARCHAR2
+  )
+  /*
+  --Input parameters
+   p_org_code :Code of the organisation
+   p_empcode  :Employee code of initiator
+   p_approval_type:Approval type
+   p_area_name:Used for PMS, In case the area of PI and project area differs then pass the area desc so that the approval can be area based.
+   p_role_reqd:Used for PMS, In case the area of PI and project area differs and the PI is the director for that area also then pass 'Y' so that the       approval can be role based. In other system pass this as 'N'
+ -- Output parameter: Route_number: Needed for fetching mail details from the table OS_APPROVAL_TYPE_DETAIL_STAGE
+                                                 Path : Needed for finding the next approval authority and stage
+-- Treat Employee from a diffrent area as a Normal employee in that area whatever may be his Role in his own area
+  */
+   RETURN VARCHAR2
+IS
+   v_ret               VARCHAR2 (100) := '';
+   v_emp_role_code     VARCHAR2 (25)  := '';
+   v_app_role_code     VARCHAR2 (25)  := '';
+   v_flowrole_code     VARCHAR2 (25)  := '';
+   v_org_level_code    VARCHAR2 (25)  := '';
+   v_flow_type         VARCHAR2 (25);
+   v_flow_level_code   VARCHAR2 (25);
+   v_appath_empcode    VARCHAR2 (5);
+   i                   NUMBER         := 0;
+   v_route             VARCHAR2 (25);
+   v_route_no          VARCHAR2 (25);
+   v_line_no           VARCHAR2 (25);
+   v_start_level         VARCHAR2 (25);
+   v_end_level           VARCHAR2 (25);
+   v_post                          NUMBER (5);
+   v_emp_area          VARCHAR2 (10);
+   v_app_string          VARCHAR2 (100);
+   flgRole                         CHAR(1):='N';
+   v_objectid            VARCHAR2(8);
+  stg                             CHAR(1);
+  xemploc                         VARCHAR2(2);
+   x_pjloc                         VARCHAR2(2); 
+  xadhead                          CHAR(4);
+  /* Constants usede for admin head approval */
+  ADMINROUTETYPES CONSTANT VARCHAR2(20):='0003';
+  ADMINHEADCODE        CONSTANT  VARCHAR2(3):='008';
+-- Cursor to get the rule type for a specific approval type and employee level code
+   CURSOR emp
+   IS
+      SELECT A.empcode, A.org_level_code, A.ppost, b.rule_type,b.OBJECT_ID
+        FROM ORG_EMPLOYEE_MASTER A, OS_APPROVAL_TYPE_MASTER b
+       WHERE A.org_code = p_org_code
+         AND A.empcode = p_empcode
+         AND b.approval_type = p_approval_type;
+-- Cursour to get the rule type for a specific approval type and area level code
+CURSOR area_level
+IS
+SELECT A.AREACODE,b.rule_type,b.OBJECT_ID
+FROM         OS_ORGANISATION_VIEW A,OS_APPROVAL_TYPE_MASTER b
+WHERE    A.orgcode = p_org_code
+AND trim(Areaname)=trim(p_area_name) 
+and loccode = p_org_code||x_pjloc
+AND b.Approval_type=p_Approval_type;
+-- Cursour to fine route number and route type at various levels based on organisation,division, area, location and employee level
+   CURSOR route_lv1
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 2)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv2
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 4)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv3
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = v_org_level_code
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_loc
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.office_location = lpad(v_post,2,0);
+   CURSOR route_emp
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.emp_code = p_empcode;
+-- Cursor to get the role code of the employee
+   CURSOR get_role
+   IS
+      SELECT distinct A.rolecode
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode
+         AND rolecode in ('002','003','004','005','008','214');
+-- Cursor to get the line no and start and end level
+   CURSOR app_route_det
+   IS
+      SELECT   A.line_no, A.start_level, A.end_level
+          FROM OS_APPROVAL_TYPE_DETAIL_ROUTE A
+         WHERE A.org_code = p_org_code
+           AND A.approval_type = p_approval_type
+           AND A.route_no = v_route_no
+           AND A.role_code = v_emp_role_code
+      ORDER BY line_no;
+-- cursor to find route detail
+   CURSOR route_det
+   IS
+        select role_code,sno
+        from
+        (
+         SELECT   A.role_code,rownum sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code<>'014'
+--      ORDER BY level;
+        union
+         SELECT   A.role_code,014 sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code='014')
+   ORDER BY sno;
+-- cursor to find approval flow
+   CURSOR get_app
+   IS
+      select empcode from
+      (
+      SELECT distinct empcode, rolecode
+        FROM os_organisation_role_emp_view A
+           WHERE trim(A.orgcode) =trim(p_org_code)
+         AND trim(A.areacode) =trim(v_org_level_code)
+         AND trim(rolecode) =trim(v_app_role_code)
+         and trim(rolecode)<>200
+         union
+         select empcode,'200' rolecode  from org_employee_master
+         where empcode=p_empcode
+                  union
+--         select '1639','009' rolecode  from DUAL
+         select PI_CODE,'009' rolecode from project_master where project_code=p_prj_code
+         )
+         where rolecode=v_app_role_code;
+-- cursor to find approval flow for admin head
+  CURSOR get_App_lochead
+  IS SELECT Get_Admin_Head(p_empcode) empcode FROM dual;
+/* Main program begins here */
+BEGIN
+DBMS_OUTPUT.PUT_LINE('EMPCODE YOGENDRA:'||p_empcode);
+ --SELECT exareacod INTO v_emp_area FROM employee WHERE empcode=p_empcode;
+ 
+ DBMS_OUTPUT.put_line ('Entered project');
+SELECT exareacod,lpad(ppost,2,'0') INTO v_emp_area,xemploc FROM employee WHERE empcode=p_empcode;
+if nvl(p_prj_code,'X') = 'X' then
+    x_pjloc := xemploc;
+else
+    select lpad(ppost,2,'0') into x_pjloc 
+    from employee,project_master
+    where project_code = p_prj_code
+    and empcode = pi_code;
+    ----19022013
+    if  x_pjloc not in ('01','03','12','32','02','06','04','64','48') then
+
+    select lpad(ppost,2,'0') into x_pjloc 
+    from employee,project_master
+    where project_code = p_prj_code
+    and empcode = nvl(standby_pi,external_pi_code);
+    end if;
+
+
+    
+    
+end if;
+ 
+--  IF trim(p_projectcode)<>'X' THEN
+--   SELECT exareacod INTO v_proj_area FROM PROJECT_MASTER WHERE project_Code=p_projectCode; -- RS
+--   END IF;
+   DBMS_OUTPUT.put_line ('Entered project'||'Emp:'||v_emp_Area||'p_area_name-'||p_area_name||'-'||v_org_level_code); -- RS
+  IF p_area_name='X' THEN -- If taking at employee level
+   FOR r1 IN emp
+   LOOP
+      v_org_level_code := r1.org_level_code;
+      v_post := r1.ppost;
+     v_objectid:=r1.object_id;
+     DBMS_OUTPUT.put_line ('Entered emp: '||v_org_level_code||' Obj:'||v_objectid);
+   END LOOP;
+   ELSE
+   FOR r1 IN area_level -- Area level
+   LOOP
+      v_org_level_code := r1.areacode;
+      v_objectid:=r1.object_id;
+       dbms_output.Put_line( 'area ROLE code: '|| v_org_level_code);
+   END LOOP;
+   END IF;
+   FOR r1 IN route_lv1
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv2
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv3
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_loc
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_emp
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+  o_route_no:=v_route_no;
+   DBMS_OUTPUT.put_line ('Route TYPE: '||v_route||' No:'||v_route_no);
+ -- getting the basic role code
+ SELECT DISTINCT role_code INTO v_emp_role_code
+FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+WHERE b.APPROVAL_TYPE=p_approval_type
+AND A.ROUTE_TYPE=b.ROUTE_TYPE
+AND A.ROUTE_LEVEL='01';                     --'01' is basic route level
+ -- Checking for finding role
+ IF trim(p_area_name)='X' THEN
+   flgRole:='Y';
+ ELSE
+      IF  (p_role_reqd='Y') THEN
+      flgRole:='Y';
+    ELSE
+     flgRole:='N';
+    END IF;
+END IF;
+dbms_output.Put_line( 'flgPI'||flgRole||'Emp ROLE code: '||v_emp_role_code);
+IF flgRole='Y' THEN
+  FOR r1 IN get_role
+   LOOP
+      v_emp_role_code := r1.rolecode;
+   END LOOP;
+END IF;
+IF INSTR(ADMINROUTETYPES,v_route) >0 THEN
+SELECT Get_Admin_Head(p_empcode) INTO xadhead FROM dual;
+ IF xadhead=p_empcode THEN
+  v_emp_role_code:=ADMINHEADCODE;
+ ELSE
+   -- getting the basic role code
+   SELECT DISTINCT role_code INTO v_emp_role_code
+   FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+   WHERE b.APPROVAL_TYPE=p_approval_type
+   AND A.ROUTE_TYPE=b.ROUTE_TYPE
+   AND A.ROUTE_LEVEL='01';
+   END IF;
+END IF;
+dbms_output.Put_line( 'Emp ROLE code: '||v_emp_role_code||flgRole||'-'||v_route_no||'-'||v_emp_role_code);
+   i := 0;
+   FOR r1 IN app_route_det
+   LOOP
+      v_line_no := r1.line_no;
+      v_start_level := r1.start_level;
+      v_end_level := r1.end_level;
+     dbms_output.put_line('linen--'||v_line_no||'--start level'||v_start_level||'-'||v_route);
+      FOR r2 IN route_det
+      LOOP
+         v_app_role_code := r2.role_code;
+        dbms_output.put_line('Object--'||p_APPROVAL_TYPE||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+         SELECT stage_id  INTO stg FROM OS_APPROVAL_TYPE_DETAIL_STAGE WHERE APPROVAL_TYPE=p_APPROVAL_TYPE  AND route_no= v_route_no  AND INSTR(rolecode,v_app_role_code)>0;
+--        dbms_output.put_line('ADMINHEADCODE'||ADMINHEADCODE);
+  --      dbms_output.put_line('v_app_role_code'||v_app_role_code);
+        dbms_output.put_line('Stage'||stg||v_start_level);
+        IF v_app_role_code<>ADMINHEADCODE THEN
+--             dbms_output.put_line('yo--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+--            p_org_code,v_org_level_code,v_app_role_code
+         FOR r3 IN get_app
+         LOOP
+    --                   dbms_output.put_line('YOGENDRA VALUE I '||i);
+             dbms_output.put_line('Objectn--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+            IF i = 0  THEN
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+            dbms_output.put_line(v_app_string);
+         END LOOP;
+    ELSE
+    FOR r3 IN get_App_lochead
+         LOOP
+         dbms_output.put_line('Entered admin head');
+            IF i = 0
+            THEN
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+         END LOOP;
+    END IF;
+      END LOOP;
+   END LOOP;
+   v_ret :=';'||trim( v_app_string)||';X'   ;
+  RETURN v_ret;
+END;
+FUNCTION Get_Approving_Authorities_Pj(
+   p_org_code             VARCHAR2,
+   p_empcode         IN   VARCHAR2,
+   p_approval_type   IN   VARCHAR2,
+   p_area_name  IN VARCHAR2,
+   p_role_reqd      IN CHAR,
+   p_prj_code in char,
+   o_route_no OUT  VARCHAR2
+  )
+  /*
+  --Input parameters
+   p_org_code :Code of the organisation
+   p_empcode  :Employee code of initiator
+   p_approval_type:Approval type
+   p_area_name:Used for PMS, In case the area of PI and project area differs then pass the area desc so that the approval can be area based.
+   p_role_reqd:Used for PMS, In case the area of PI and project area differs and the PI is the director for that area also then pass 'Y' so that the       approval can be role based. In other system pass this as 'N'
+ -- Output parameter: Route_number: Needed for fetching mail details from the table OS_APPROVAL_TYPE_DETAIL_STAGE
+                                                 Path : Needed for finding the next approval authority and stage
+-- Treat Employee from a diffrent area as a Normal employee in that area whatever may be his Role in his own area
+  */
+   RETURN VARCHAR2
+IS
+   v_ret               VARCHAR2 (100) := '';
+   v_emp_role_code     VARCHAR2 (25)  := '';
+   v_app_role_code     VARCHAR2 (25)  := '';
+   v_flowrole_code     VARCHAR2 (25)  := '';
+   v_org_level_code    VARCHAR2 (25)  := '';
+   v_flow_type         VARCHAR2 (25);
+   v_flow_level_code   VARCHAR2 (25);
+   v_appath_empcode    VARCHAR2 (5);
+   i                   NUMBER         := 0;
+   v_route             VARCHAR2 (25);
+   v_route_no          VARCHAR2 (25);
+   v_line_no           VARCHAR2 (25);
+   v_start_level         VARCHAR2 (25);
+   v_end_level           VARCHAR2 (25);
+   v_post                          NUMBER (5);
+   v_emp_area          VARCHAR2 (10);
+   v_app_string          VARCHAR2 (100);
+   flgRole                         CHAR(1):='N';
+   v_objectid            VARCHAR2(8);
+  stg                             CHAR(1);
+  xadhead                          CHAR(4);
+  xemploc                         VARCHAR2(2);
+  x_pjloc                         VARCHAR2(2);  
+  act_emp                          CHAR(4);
+  v_role number; v_pd_role VARCHAR2(10);
+  /* Constants usede for admin head approval */
+  ADMINROUTETYPES CONSTANT VARCHAR2(20):='0003';
+  ADMINHEADCODE        CONSTANT  VARCHAR2(3):='008';
+-- Cursor to get the rule type for a specific approval type and employee level code
+   CURSOR emp
+   IS
+      SELECT A.empcode, A.org_level_code, A.ppost, b.rule_type,b.OBJECT_ID
+        FROM ORG_EMPLOYEE_MASTER A, OS_APPROVAL_TYPE_MASTER b
+       WHERE A.org_code = p_org_code
+         AND A.empcode = p_empcode
+         AND b.approval_type = p_approval_type;
+-- Cursour to get the rule type for a specific approval type and area level code
+CURSOR area_level
+IS
+SELECT A.AREACODE,b.rule_type,b.OBJECT_ID
+FROM         OS_ORGANISATION_VIEW A,OS_APPROVAL_TYPE_MASTER b
+WHERE    A.orgcode = p_org_code
+AND trim(Areaname)=trim(p_area_name)
+and loccode = p_org_code||x_pjloc
+AND b.Approval_type=p_Approval_type;
+-- Cursour to fine route number and route type at various levels based on organisation,division, area, location and employee level
+   CURSOR route_lv1
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 2)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv2
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = SUBSTR (v_org_level_code, 1, 4)
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_lv3
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.org_level_code = v_org_level_code
+         AND trim(NVL(OFFICE_LOCATION,'X'))='X'
+         and trim(NVL(EMP_CODE,'X'))='X';
+   CURSOR route_loc
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.office_location = lpad(v_post,2,0);
+   CURSOR route_emp
+   IS
+      SELECT A.route_no, A.route_type
+        FROM OS_APPROVAL_TYPE_DETAIL A
+       WHERE A.org_code = p_org_code
+         AND A.approval_type = p_approval_type
+         AND A.emp_code = p_empcode;
+-- Cursor to get the role code of the employee
+   CURSOR get_role
+   IS
+      SELECT distinct A.rolecode
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode
+         AND rolecode in ('002','003','004','005','008','206','214');
+-- Cursor to get the line no and start and end level
+   CURSOR app_route_det
+   IS
+      SELECT   A.line_no, A.start_level, A.end_level
+          FROM OS_APPROVAL_TYPE_DETAIL_ROUTE A
+         WHERE A.org_code = p_org_code
+           AND A.approval_type = p_approval_type
+           AND A.route_no = v_route_no
+           AND A.role_code = v_emp_role_code
+      ORDER BY line_no;
+-- cursor to find route detail
+   CURSOR route_det
+   IS
+        select role_code,sno
+        from
+        (
+         SELECT   A.role_code,rownum sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code<>'014'
+--      ORDER BY level;
+        union
+         SELECT   A.role_code,014 sno
+          FROM OS_ROUTE_DETAIL A
+         WHERE A.org_code = p_org_code
+           AND A.route_level = v_start_level
+           AND A.route_type = v_route
+           AND role_code='014')
+   ORDER BY sno;
+-- cursor to find approval flow
+   CURSOR get_app
+   IS
+      select empcode from
+      (
+      SELECT distinct empcode, rolecode
+        FROM os_organisation_role_emp_view A
+           WHERE trim(A.orgcode) =trim(p_org_code)
+         AND trim(A.areacode) =trim(v_org_level_code)
+         AND trim(rolecode) =trim(v_app_role_code)
+         and trim(rolecode)<>200
+         union
+         select empcode,'200' rolecode  from org_employee_master
+         where empcode=p_empcode)
+         where rolecode=v_app_role_code;
+-- cursor to find approval flow for admin head
+  CURSOR get_App_lochead
+  IS SELECT Get_Admin_Head(p_empcode) empcode FROM dual;
+/* Main program begins here */
+BEGIN
+DBMS_OUTPUT.put_line ('Entered project');
+SELECT exareacod,lpad(ppost,2,'0') INTO v_emp_area,xemploc FROM employee WHERE empcode=p_empcode;
+if nvl(p_prj_code,'X') = 'X' then
+    x_pjloc := xemploc;
+else
+    select lpad(ppost,2,'0') into x_pjloc 
+    from employee,project_master
+    where project_code = p_prj_code
+    and empcode = pi_code;
+    
+   if  x_pjloc not in ('01','03','12','32','02','06','04','64','48','20') then
+
+    select lpad(ppost,2,'0') into x_pjloc 
+    from employee,project_master
+    where project_code = p_prj_code
+    and empcode = nvl(standby_pi,external_pi_code);
+    end if;
+    
+end if;
+    DBMS_OUTPUT.put_line ('Entered project'||'Emp:'||v_emp_Area); -- RS
+  IF p_area_name='X' THEN -- If taking at employee level
+   FOR r1 IN emp
+   LOOP
+      v_org_level_code := r1.org_level_code;
+      v_post := r1.ppost;
+     v_objectid:=r1.object_id;
+     DBMS_OUTPUT.put_line ('Entered emp: '||v_org_level_code||' Obj:'||v_objectid);
+   END LOOP;
+   ELSE
+   FOR r1 IN area_level -- Area level
+   LOOP
+      v_org_level_code := r1.areacode;
+      v_objectid:=r1.object_id;
+       dbms_output.Put_line( 'area ROLE code: '|| v_org_level_code);
+   END LOOP;
+   END IF;
+   FOR r1 IN route_lv1
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv2
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_lv3
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_loc
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+   FOR r1 IN route_emp
+   LOOP
+      v_route := r1.route_type;
+      v_route_no := r1.route_no;
+   END LOOP;
+  o_route_no:=v_route_no;
+   DBMS_OUTPUT.put_line ('Route TYPE: '||v_route||' No:'||v_route_no);
+ -- getting the basic role code
+ SELECT DISTINCT role_code INTO v_emp_role_code
+FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+WHERE b.APPROVAL_TYPE=p_approval_type
+AND A.ROUTE_TYPE=b.ROUTE_TYPE
+AND A.ROUTE_LEVEL='01';                     --'01' is basic route level
+
+
+        --------------------------------dated 15102015----------------------------------
+        select count(*)  into v_role from (
+        SELECT distinct A.rolecode
+        FROM os_organisation_role_emp_view A
+        WHERE A.orgcode = p_org_code
+        AND A.empcode = p_empcode
+        AND rolecode in ('002','003','004','005','008','206','214')
+        );
+dbms_output.Put_line( 'v_role'||v_role);
+
+
+        if  v_role =0 then
+        flgRole :='N';
+        else
+
+        flgRole:='Y';
+        end if;        
+
+-------------------------------------------------------------------
+
+ -- Checking for finding role
+ IF trim(p_area_name)='X' THEN
+   flgRole:='Y';
+ ELSE
+      IF  (p_role_reqd='Y') THEN
+      flgRole:='Y';
+    ELSE
+     flgRole:='N';
+    END IF;
+END IF;
+
+-----on dated 15102015
+
+         IF trim(p_area_name)='X' THEN
+           flgRole:='Y';
+           else
+           
+          if  v_role =0 then
+                flgRole :='N';
+                else
+
+                flgRole:='Y';
+                end if;   
+        end if;
+---------------------------------------------------
+
+dbms_output.Put_line( 'flgPI'||flgRole||'Emp ROLE code: '||v_emp_role_code);
+
+IF flgRole='Y' THEN
+
+  FOR r1 IN get_role
+   LOOP
+      v_emp_role_code := r1.rolecode;
+   END LOOP;
+   
+  /* else
+
+   FOR r1 IN get_role
+   LOOP
+      v_emp_role_code := r1.rolecode;
+   END LOOP;*/
+   
+END IF;
+
+
+
+
+dbms_output.Put_line( '22 flgPI  '||flgRole||'Emp ROLE code: '||v_emp_role_code|| ' v_org_level_code '||v_org_level_code);
+
+ /*SELECT distinct A.rolecode
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode and areacode =v_org_level_code
+         AND rolecode in ('214')
+*/
+
+
+IF INSTR(ADMINROUTETYPES,v_route) >0 THEN
+
+
+--added on 26112018
+SELECT Get_Admin_Head(p_empcode) INTO xadhead FROM dual;
+
+
+ IF xadhead=p_empcode THEN
+ 
+ begin
+ SELECT distinct A.rolecode into v_pd_role
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode and areacode =v_org_level_code
+         AND rolecode in ('214');
+         exception when others then
+         v_pd_role:='P';
+         
+      end;   
+      
+        dbms_output.Put_line( 'v_pd_role  '||v_pd_role);
+    if v_pd_role = 'P' then
+    v_emp_role_code:=ADMINHEADCODE;
+    ELSE
+    v_emp_role_code:=v_pd_role;
+    
+    end if;
+  
+  
+  dbms_output.Put_line( '23 flgPI  '||flgRole||'v_emp_role_code : '||v_emp_role_code);
+  
+  
+  
+  
+  
+ ELSE
+   -- getting the basic role code
+   SELECT DISTINCT role_code INTO v_emp_role_code
+   FROM OS_ROUTE_DETAIL A,OS_APPROVAL_TYPE_DETAIL b
+   WHERE b.APPROVAL_TYPE=p_approval_type
+   AND A.ROUTE_TYPE=b.ROUTE_TYPE
+   AND A.ROUTE_LEVEL='01';
+   
+
+   
+   END IF;
+END IF;
+
+--v_emp_role_code:='214';
+ begin
+ SELECT distinct A.rolecode into v_pd_role
+        FROM os_organisation_role_emp_view A
+       WHERE A.orgcode = p_org_code
+         AND A.empcode = p_empcode and areacode =v_org_level_code
+         AND rolecode in ('214');
+         exception when others then
+         v_pd_role:='P';
+         
+      end;
+      
+ if v_pd_role <> 'P' then
+    v_emp_role_code:='214';
+    end if;
+
+dbms_output.Put_line( 'Emp ROLE code: '||v_emp_role_code||flgRole);
+
+
+
+   i := 0;
+   FOR r1 IN app_route_det
+   LOOP
+      v_line_no := r1.line_no;
+      v_start_level := r1.start_level;
+      v_end_level := r1.end_level;
+     dbms_output.put_line('line--'||v_line_no||'--start level'||v_start_level);
+      FOR r2 IN route_det
+      LOOP
+         v_app_role_code := r2.role_code;
+        dbms_output.put_line('Object--'||p_APPROVAL_TYPE||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+         SELECT stage_id  INTO stg FROM OS_APPROVAL_TYPE_DETAIL_STAGE WHERE APPROVAL_TYPE=p_APPROVAL_TYPE  AND route_no= v_route_no  AND INSTR(rolecode,v_app_role_code)>0;
+--        dbms_output.put_line('ADMINHEADCODE'||ADMINHEADCODE);
+  --      dbms_output.put_line('v_app_role_code'||v_app_role_code);
+        dbms_output.put_line('Stage'||stg);
+        IF v_app_role_code<>ADMINHEADCODE THEN
+--             dbms_output.put_line('yo--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+--            p_org_code,v_org_level_code,v_app_role_code
+        if v_app_role_code in ('206','207') then
+             begin
+                select  distinct acting_empcode into act_emp
+                from os_organisation_role
+                where trim(org_code) = trim(p_org_code)
+                AND trim(org_level_code) =trim(p_org_code)||xemploc
+                AND trim(role_code) =trim(v_app_role_code);
+             exception
+                when others then
+                    act_emp := null;
+             end;
+             dbms_output.put_line('act_emp '||act_emp);
+             if act_emp is not null then
+              if v_app_string is null then
+                v_app_string :=    act_emp||';'|| v_line_no||';'||stg  ;
+              else
+                v_app_string := v_app_string || ';' ||act_emp||';'|| v_line_no||';'||stg;
+              end if;
+             end if;
+             Else
+         FOR r3 IN get_app
+         LOOP
+    --                   dbms_output.put_line('YOGENDRA VALUE I '||i);
+             dbms_output.put_line('Object--'||p_org_code||'---'||v_app_role_code||'---'||v_org_level_code||'---');
+            --IF i = 0  THEN--commented for TR @RC
+            if v_app_string is null then
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+            dbms_output.put_line(v_app_string);
+         END LOOP;
+         End if;
+    ELSE
+    FOR r3 IN get_App_lochead
+         LOOP
+         dbms_output.put_line('Entered admin head');
+            IF i = 0
+            THEN
+               v_app_string :=    r3.empcode||';'|| v_line_no||';'||stg  ;
+            ELSE
+               v_app_string := v_app_string || ';' ||r3.empcode||';'|| v_line_no||';'||stg;
+            END IF;
+            i :=   i  + 1;
+         END LOOP;
+    END IF;
+      END LOOP;
+   END LOOP;
+   v_ret :=';'||trim( v_app_string)||';X'   ;
+  RETURN v_ret;
+END;
+end;
+/

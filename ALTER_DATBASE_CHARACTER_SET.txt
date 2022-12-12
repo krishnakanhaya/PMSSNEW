@@ -1,0 +1,27 @@
+select * from NLS_DATABASE_PARAMETERS where parameter='NLS_CHARACTERSET';
+
+db_name is optional. The character set name should be specified without quotes. For example:
+
+ALTER DATABASE CHARACTER SET AL32UTF8;
+
+To change the database character set, perform the following steps:
+
+Shut down the database, using either a SHUTDOWN IMMEDIATE or a SHUTDOWN NORMAL statement.
+Do a full backup of the database because the ALTER DATABASE CHARACTER SET statement cannot be rolled back.
+Complete the following statements:
+STARTUP MOUNT;
+ALTER SYSTEM ENABLE RESTRICTED SESSION;
+ALTER SYSTEM SET JOB_QUEUE_PROCESSES=0;
+ALTER SYSTEM SET AQ_TM_PROCESSES=0;
+ALTER DATABASE OPEN;
+ALTER DATABASE CHARACTER SET new_character_set;
+SHUTDOWN IMMEDIATE; -- or SHUTDOWN NORMAL; 
+STARTUP;
+
+
+------------------------------------------
+
+
+STARTUP MOUNT; ALTER SYSTEM ENABLE RESTRICTED SESSION; ALTER SYSTEM SET JOB_QUEUE_PROCESSES=0; 
+ALTER SYSTEM SET AQ_TM_PROCESSES=0; ALTER DATABASE OPEN; ALTER DATABASE CHARACTER SET new_character_set; 
+SHUTDOWN IMMEDIATE; -- or SHUTDOWN NORMAL; STARTUP;

@@ -1,0 +1,747 @@
+CREATE OR REPLACE PROCEDURE ERPDEV.SAL_PF_Mon_upd(pp_empcode IN CHAR, pp_fin_year IN CHAR) AS
+/* Procedure to update the monthly table of PF */
+lv_from_date DATE;
+lv_to_date DATE;
+lv_M_PF_MCB NUMBER; lv_E_PF_MCB NUMBER;
+lv_M_PF_INT NUMBER; lv_E_PF_INT NUMBER;
+lv_M_PF_INTC NUMBER; lv_E_PF_INTC NUMBER;
+lv_M_PF_MTotal NUMBER; lv_E_PF_MTotal NUMBER;
+lv_M_PF_OBAL NUMBER; lv_E_PF_OBAL NUMBER;
+lv_RLoan_Open_Memb NUMBER;
+lv_M_PF_TRANS_IN NUMBER; lv_E_PF_TRANS_IN NUMBER;
+lv_M_PF_TRANS_IN1 NUMBER; lv_E_PF_TRANS_IN1 NUMBER;
+lv_M_PF_TRANS_IN2 NUMBER; lv_E_PF_TRANS_IN2 NUMBER;
+lv_M_PF_TRANS_OUT NUMBER; lv_E_PF_TRANS_OUT NUMBER;
+lv_M_NR_LOAN NUMBER; lv_E_NR_LOAN NUMBER;
+lv_M_R_LOAN_AMT NUMBER; lv_M_R_LOAN_REF NUMBER; lv_M_R_LOAN_REF2 NUMBER;
+lv_M_R_LOAN_INT NUMBER; lv_M_R_LOAN_BAL NUMBER;
+lv_count NUMBER;
+lv_empcode CHAR(4);
+lv_mon DATE;
+lv_max_sal_date DATE;
+lv_min_sal_date DATE;
+lv_loan_mon_flag CHAR(1);
+PF_INCR NUMBER;--KK
+--
+lv_basic NUMBER;
+lv_M_PF NUMBER; lv_E_PF NUMBER; lv_E_FPF NUMBER;
+lv_E_APF NUMBER; lv_M_PF_Arr NUMBER;
+lv_E_PF_Arr NUMBER; lv_E_APF_Arr NUMBER;
+lv_VPF NUMBER;
+v_dol date;
+BEGIN
+  lv_from_date:= TO_DATE(('01-APR-'||SUBSTR(pp_fin_year,1,4)), 'dd-mon-yyyy');
+  lv_to_date:=   TO_DATE(('31-MAR-'||SUBSTR(pp_fin_year,6,4)), 'dd-mon-yyyy');
+  --lv_from_date:= TO_DATE(('30-APR-'||SUBSTR(pp_fin_year,1,4)), 'dd-mon-yyyy');
+  --lv_to_date:=   TO_DATE(('31-MAR-'||SUBSTR(pp_fin_year,6,4)), 'dd-mon-yyyy');
+  lv_empcode:= ' ';
+  /*delete the records */
+    DELETE  FROM salary_PF_monthly_details
+    WHERE empcode LIKE pp_empcode;
+     --AND pf_month>=lv_from_date AND pf_month<= lv_to_date;
+    COMMIT;
+  /*-------------------*/
+  FOR c1 IN (SELECT empcode, pf_ac_no, pf_settle_status, pf_settle_date
+             FROM (SELECT empcode, pf_ac_no, pf_settle_status, pf_settle_date
+                  FROM employee_salary_master
+                  WHERE empcode LIKE pp_empcode AND
+                    pf_settle_status<>'S' AND pf_settle_status<>'N'
+                  UNION
+                  SELECT empcode, pf_ac_no, pf_settle_status, pf_settle_date
+                  FROM employee_salary_master
+                  WHERE empcode LIKE pp_empcode AND pf_settle_status='S' AND
+                   pf_settle_date>= lv_from_date AND pf_settle_date<= lv_to_date)
+             ORDER BY empcode)
+  LOOP
+  /* DOL of the employee*/
+   begin
+   select dol into v_dol from employee_master
+   where empcode = c1.empcode ;
+   exception when others then
+   v_dol :=null;
+   end;
+
+
+    /* initialise the variables */
+      lv_M_PF_MCB:= 0;
+      lv_E_PF_MCB:= 0;
+      lv_M_PF_INT:= 0;
+      lv_E_PF_INT:= 0;
+      lv_M_PF_INTC:= 0;
+      lv_E_PF_INTC:= 0;
+      lv_M_PF_MTotal:= 0;
+      lv_E_PF_MTotal:= 0;
+      lv_basic:= 0;
+      lv_M_PF:= 0;
+      lv_E_PF:= 0;
+      lv_E_FPF:= 0;
+      lv_E_APF:= 0;
+      lv_M_PF_Arr:= 0;
+      lv_E_PF_Arr:= 0;
+      lv_E_APF_Arr:= 0;
+      lv_VPF:= 0;
+      lv_M_PF_TRANS_IN:= 0;
+      lv_E_PF_TRANS_IN:= 0;
+      lv_M_PF_TRANS_OUT:= 0;
+      lv_E_PF_TRANS_OUT:= 0;
+      lv_M_NR_LOAN:= 0;
+      lv_E_NR_LOAN:= 0;
+      lv_M_R_LOAN_AMT:= 0;
+      lv_M_R_LOAN_REF:= 0;
+      lv_M_R_LOAN_INT:= 0;
+      lv_M_R_LOAN_BAL:= 0;
+      lv_M_NR_LOAN:=0;
+      lv_E_NR_LOAN:=0;
+      lv_loan_mon_flag:= 'F';
+    /* Find the opening balances of employee */
+      SELECT COUNT(*) INTO lv_count
+      FROM employee_salary_master
+      WHERE empcode=c1.empcode;
+      IF lv_count > 0 THEN
+        SELECT NVL(pf_open_memb,0), NVL(pf_open_empl,0), NVL(RLoan_Open_Memb,0)
+        INTO lv_M_PF_OBAL, lv_E_PF_OBAL, lv_RLoan_Open_Memb
+        FROM employee_salary_master
+        WHERE empcode=c1.empcode;
+      ELSE
+        lv_M_PF_OBAL:=0;
+        lv_E_PF_OBAL:=0;
+      END IF;
+      lv_M_PF_MCB:= lv_M_PF_OBAL;
+      lv_E_PF_MCB:= lv_E_PF_OBAL;
+      lv_empcode:= c1.empcode;
+      lv_M_R_LOAN_BAL:= lv_RLoan_Open_Memb;
+    /* Find the opening balances of employee */
+    lv_min_sal_date:= lv_from_date;
+    lv_max_sal_date:= lv_to_date;
+    IF c1.pf_settle_status= 'O' THEN
+      SELECT MAX(sal_date) INTO lv_max_sal_date
+      FROM salary_monthly_details_vw
+      WHERE empcode= c1.empcode;
+      --
+      SELECT MIN(sal_date) INTO lv_min_sal_date
+      FROM salary_monthly_details_vw
+      WHERE empcode= c1.empcode;
+    END IF;
+    --------------
+    lv_mon:= ADD_MONTHS(lv_from_date, -1);
+    FOR i in 1..12
+    LOOP
+    --------------
+      /* added later on ==============*/
+        lv_basic:= 0;
+        lv_M_PF:= 0;
+        lv_E_PF:= 0;
+        lv_E_FPF:= 0;
+        lv_E_APF:= 0;
+        lv_M_PF_Arr:= 0;
+        lv_E_PF_Arr:= 0;
+        lv_E_APF_Arr:=  0;
+        lv_VPF:= 0;
+      lv_M_R_LOAN_REF:= 0;
+      lv_M_R_LOAN_INT:= 0;
+      lv_M_NR_LOAN:=0;
+      lv_E_NR_LOAN:=0;
+      /*==============================*/
+      lv_mon:= ADD_MONTHS(lv_mon,1);
+      EXIT WHEN ((c1.pf_settle_status= 'O') AND (TRUNC(lv_mon, 'MM')=TRUNC(ADD_MONTHS(lv_max_sal_date, 1), 'MM')) );
+      EXIT WHEN ((c1.pf_settle_status= 'S') AND (TRUNC(lv_mon, 'MM')=TRUNC(ADD_MONTHS(c1.pf_settle_date, 1), 'MM')));
+       IF TRUNC(lv_mon, 'MM') <= TRUNC(lv_max_sal_date, 'MM') AND
+         TRUNC(lv_mon, 'MM') >= TRUNC(lv_min_sal_date, 'MM')  THEN
+         FOR c3 IN(SELECT empcode, sal_date sal_month
+                   , NVL(SUM(DECODE(sc_code, '1010', DECODE(maldr_flag, 'M', sc_amt, 'A', sc_amt,'P',SC_AMT, -sc_amt))),0) Basic
+                   , NVL(SUM(DECODE(sc_code, '1080', DECODE(maldr_flag, 'M', sc_amt, 'A', 0,'P',SC_AMT, -sc_amt))),0) M_PF
+                   , NVL(SUM(DECODE(sc_code, '1080', DECODE(maldr_flag, 'A', sc_amt, 0))),0) M_PF_Arr
+                   , NVL(SUM(DECODE(sc_code, '1060', DECODE(maldr_flag, 'M', sc_amt, 'A', 0,'P',SC_AMT, -sc_amt))),0) E_PF
+                   , NVL(SUM(DECODE(sc_code, '1060', DECODE(maldr_flag, 'A', sc_amt, 0))),0) E_PF_Arr
+                   , NVL(SUM(DECODE(sc_code, '1540', DECODE(maldr_flag, 'M', sc_amt, 'A', 0,'P',SC_AMT, -sc_amt))),0) E_APF
+                   , NVL(SUM(DECODE(sc_code, '1540', DECODE(maldr_flag, 'A', sc_amt, 0))),0) E_APF_Arr
+                   , NVL(SUM(DECODE(sc_code, '1230', DECODE(maldr_flag, 'M', sc_amt, 'A', sc_amt, -sc_amt))),0) VPF
+                   , NVL(SUM(DECODE(sc_code, '1070', DECODE(maldr_flag, 'M', sc_amt, 'A', sc_amt,'P',SC_AMT, -sc_amt))),0) E_FPF
+                  FROM salary_monthly_details_vw
+                  WHERE empcode= c1.empcode AND
+                    TRUNC(sal_date, 'MM')= TRUNC(lv_mon, 'MM')
+                  GROUP BY empcode, sal_date
+                  ORDER BY empcode, sal_date)
+        LOOP
+        PF_INCR:=C3.M_PF+C3.M_PF_Arr+C3.VPF
+          /*------------------------------*/
+          /* Check for Transfer in amount */
+          /*------------------------------*/
+--          SELECT COUNT(*) INTO lv_count
+--          FROM employee_salary_master
+--          WHERE empcode=c3.empcode AND
+--            TRUNC(pf_trans_in_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+--          IF lv_count> 0 THEN
+--            SELECT NVL(PF_TRANS_IN_MEMB,0), NVL(PF_TRANS_IN_EMPL,0)
+--              INTO lv_M_PF_TRANS_IN, lv_E_PF_TRANS_IN
+--            FROM employee_salary_master
+--            WHERE empcode=c3.empcode AND
+--              TRUNC(pf_trans_in_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+--          ELSE
+--            lv_M_PF_TRANS_IN:=0;
+--            lv_E_PF_TRANS_IN:=0;
+--          END IF;
+          /*-------------------------------*/
+          /* Check for Transfer out amount */
+          /*-------------------------------*/
+--          SELECT COUNT(*) INTO lv_count
+--          FROM employee_salary_master
+--          WHERE empcode=c3.empcode AND
+--            TRUNC(pf_trans_out_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+--          IF lv_count> 0 THEN
+--            SELECT NVL(PF_TRANS_OUT_MEMB,0), NVL(PF_TRANS_OUT_EMPL,0)
+--              INTO lv_M_PF_TRANS_OUT, lv_E_PF_TRANS_OUT
+--            FROM employee_salary_master
+--            WHERE empcode=c3.empcode AND
+--              TRUNC(pf_trans_out_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+--          ELSE
+--            lv_M_PF_TRANS_OUT:=0;
+--            lv_E_PF_TRANS_OUT:=0;
+--          END IF;
+          /*------------------------------------------------*/
+          /* Check for loan amount for non-refundable loans */
+          /*------------------------------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM salary_pf_nr_loans
+          WHERE empcode=c3.empcode AND
+            TRUNC(loan_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+          --
+          IF lv_count> 0 THEN
+            --SELECT NVL(LOAN_AMT_MEMB,0), NVL(LOAN_AMT_EMPL,0)
+            --  INTO lv_M_NR_LOAN, lv_E_NR_LOAN
+            --FROM salary_pf_nr_loans
+            --WHERE empcode=c3.empcode AND
+            --  TRUNC(loan_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+            SELECT SUM(NVL(LOAN_AMT_MEMB,0)), SUM(NVL(LOAN_AMT_EMPL,0))
+              INTO lv_M_NR_LOAN, lv_E_NR_LOAN
+            FROM salary_pf_nr_loans
+            WHERE empcode=c3.empcode AND
+              TRUNC(loan_date, 'MM')= TRUNC(c3.sal_month, 'MM')
+            GROUP BY empcode;
+            /* Deduct this amount from C PF and C PF Int */
+            IF lv_M_NR_LOAN <= lv_M_PF_MCB THEN
+              lv_M_PF_MCB:= lv_M_PF_MCB - lv_M_NR_LOAN;
+            ELSE
+              lv_M_PF_INTC:= lv_M_PF_INTC - (lv_M_NR_LOAN- lv_M_PF_MCB);
+              lv_M_PF_MCB:= 0;
+            END IF;
+            IF lv_E_NR_LOAN <= lv_E_PF_MCB THEN
+              lv_E_PF_MCB:= lv_E_PF_MCB - lv_E_NR_LOAN;
+            ELSE
+              lv_E_PF_INTC:= lv_E_PF_INTC - (lv_E_NR_LOAN- lv_E_PF_MCB);
+              lv_E_PF_MCB:= 0;
+            END IF;
+          ELSE
+            lv_M_NR_LOAN:= 0;
+            lv_E_NR_LOAN:= 0;
+          END IF;
+          /*-----------------------------------------------*/
+          /* Check for loan amount of refundable loans     */
+          /*-----------------------------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM employee_loan_instalments
+          WHERE empcode=c3.empcode AND category_code='PF' AND
+            TRUNC(loancdate, 'MM')= TRUNC(c3.sal_month, 'MM');
+          --
+          IF lv_count> 0 THEN
+            --SELECT NVL(TOTAMOUNT,0) INTO lv_M_R_LOAN_AMT
+            --FROM employee_loan_instalments
+            --WHERE empcode=c3.empcode AND category_code='PF' AND
+            --  TRUNC(loancdate, 'MM')= TRUNC(c3.sal_month, 'MM');
+            SELECT SUM(NVL(TOTAMOUNT,0)) INTO lv_M_R_LOAN_AMT
+            FROM employee_loan_instalments
+            WHERE empcode=c3.empcode AND category_code='PF' AND
+              TRUNC(loancdate, 'MM')= TRUNC(c3.sal_month, 'MM')
+            GROUP BY empcode;
+            /* Deduct this amount from C PF and C PF Int */
+            IF lv_M_R_LOAN_AMT <= lv_M_PF_MCB THEN
+              lv_M_PF_MCB:= lv_M_PF_MCB - lv_M_R_LOAN_AMT;
+            ELSE
+              lv_M_PF_INTC:= lv_M_PF_INTC - (lv_M_R_LOAN_AMT- lv_M_PF_MCB);
+              lv_M_PF_MCB:= 0;
+            END IF;
+            -- lv_M_R_LOAN_REF:= lv_M_R_LOAN_BAL;
+            lv_M_R_LOAN_BAL:= lv_M_R_LOAN_AMT;
+            lv_loan_mon_flag:= 'T';
+          ELSE
+            lv_M_R_LOAN_AMT:= 0;
+            lv_loan_mon_flag:= 'F';
+            -- lv_M_R_LOAN_BAL:= 0;
+          END IF;
+          /*-----------------------------------------------*/
+          /* Check for monthly installment and interest of
+             refundable loans                              */
+          /*-----------------------------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM loan_monthly_details
+          WHERE empcode=c3.empcode AND category_code='PF' AND
+            TRUNC(loan_calc_to, 'MM')= TRUNC(c3.sal_month, 'MM');
+          --
+          IF lv_count> 0 THEN
+            SELECT SUM(NVL(LINSTAMT,0)), SUM(NVL(LOANINT,0)) INTO
+              lv_M_R_LOAN_REF, lv_M_R_LOAN_INT
+            FROM loan_monthly_details
+            WHERE empcode=c3.empcode AND category_code='PF' AND
+            TRUNC(loan_calc_to, 'MM')= TRUNC(c3.sal_month, 'MM')
+            GROUP BY empcode;
+            /* Add this amount to C PF */
+            lv_M_PF_MCB:= lv_M_PF_MCB + lv_M_R_LOAN_REF;
+            lv_M_R_LOAN_BAL:= lv_M_R_LOAN_BAL -lv_M_R_LOAN_REF;
+          ELSE
+            lv_M_R_LOAN_REF:= 0;
+            lv_M_R_LOAN_INT:= 0;
+          END IF;
+--          /*--------------------------*/
+--          /* Check of refunded amount */
+--          /*--------------------------*/
+--          SELECT COUNT(*) INTO lv_count
+--          FROM loan_refund_details
+--          WHERE empcode=c3.empcode AND category_code='PF' AND
+--            TRUNC(refund_date, 'MM')= TRUNC(c3.sal_month, 'MM');
+--          --
+--          IF lv_count> 0 THEN
+--            SELECT SUM(NVL(refund_amt,0))  INTO lv_M_R_LOAN_REF2
+--            FROM loan_refund_details
+--            WHERE empcode=c3.empcode AND category_code='PF' AND
+--            TRUNC(refund_date, 'MM')= TRUNC(c3.sal_month, 'MM')
+--            GROUP BY empcode;
+--            /* Add this amount to C PF */
+--            lv_M_PF_MCB:= lv_M_PF_MCB + lv_M_R_LOAN_REF2;
+--            IF lv_loan_mon_flag= 'F' THEN
+--               lv_M_R_LOAN_BAL:= lv_M_R_LOAN_BAL -lv_M_R_LOAN_REF2;
+--            END IF;
+--            lv_M_R_LOAN_REF:= lv_M_R_LOAN_REF+ lv_M_R_LOAN_REF2;
+--          ELSE
+--            lv_M_R_LOAN_REF2:= 0;
+--          END IF;
+--          /*--------------------------*/
+          lv_basic:= c3.basic;
+          lv_M_PF:= c3.M_PF;
+          lv_E_PF:= c3.E_PF;
+          lv_E_FPF:= c3.E_FPF;
+          lv_E_APF:= c3.E_APF;
+          lv_M_PF_Arr:= c3.M_PF_Arr;
+          lv_E_PF_Arr:= c3.E_PF_Arr;
+          lv_E_APF_Arr:=  c3.E_APF_Arr;
+          lv_VPF:= c3.VPF;
+        END LOOP; /* c3 loop */
+        --lv_M_PF_MCB:= lv_M_PF_MCB+ (lv_M_PF+ lv_M_PF_Arr+lv_VPF+ lv_M_PF_TRANS_IN- lv_M_PF_TRANS_OUT);
+        --lv_E_PF_MCB:= lv_E_PF_MCB+ (lv_E_PF+ lv_E_PF_Arr+ lv_E_APF+ lv_E_APF_Arr+ lv_E_PF_TRANS_IN- lv_E_PF_TRANS_OUT);
+        ---------------------------------------------------------
+          /*------------------------------*/
+          /* Check for Transfer in amount */
+          /*------------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM employee_salary_master
+          WHERE empcode=c1.empcode AND
+            TRUNC(pf_trans_in_date, 'MM')= TRUNC(lv_mon, 'MM');
+          IF lv_count> 0 THEN
+            SELECT NVL(PF_TRANS_IN_MEMB,0), NVL(PF_TRANS_IN_EMPL,0)
+              INTO lv_M_PF_TRANS_IN1, lv_E_PF_TRANS_IN1
+            FROM employee_salary_master
+            WHERE empcode=c1.empcode AND
+              TRUNC(pf_trans_in_date, 'MM')= TRUNC(lv_mon, 'MM');
+          ELSE
+            lv_M_PF_TRANS_IN1:=0;
+            lv_E_PF_TRANS_IN1:=0;
+          END IF;
+
+
+        SELECT COUNT(*) INTO lv_count
+        FROM employee_pf_in_detail
+        WHERE empcode=c1.empcode AND
+        TRUNC(pf_date, 'MM')= TRUNC(lv_mon, 'MM');
+
+        IF lv_count> 0 THEN
+        SELECT sum(NVL(PF_emp_amt,0)), sum(NVL(PF_EMPL_amt,0) )
+        INTO lv_M_PF_TRANS_IN2, lv_E_PF_TRANS_IN2
+        FROM employee_pf_in_detail
+        WHERE empcode=c1.empcode AND
+        TRUNC(pf_date, 'MM')= TRUNC(lv_mon, 'MM');
+        ELSE
+        lv_M_PF_TRANS_IN2:=0;
+        lv_E_PF_TRANS_IN2:=0;
+        END IF;
+        ----Transfer In Amount------------------------------------------------
+        lv_M_PF_TRANS_IN:=lv_M_PF_TRANS_IN1+lv_M_PF_TRANS_IN2;
+        lv_E_PF_TRANS_IN:=lv_E_PF_TRANS_IN1+lv_E_PF_TRANS_IN2;
+
+
+
+          /*-------------------------------*/
+          /* Check for Transfer out amount */
+          /*-------------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM employee_salary_master
+          WHERE empcode=c1.empcode AND
+            TRUNC(pf_trans_out_date, 'MM')= TRUNC(lv_mon, 'MM');
+          IF lv_count> 0 THEN
+            SELECT NVL(PF_TRANS_OUT_MEMB,0), NVL(PF_TRANS_OUT_EMPL,0)
+              INTO lv_M_PF_TRANS_OUT, lv_E_PF_TRANS_OUT
+            FROM employee_salary_master
+            WHERE empcode=c1.empcode AND
+              TRUNC(pf_trans_out_date, 'MM')= TRUNC(lv_mon, 'MM');
+          ELSE
+            lv_M_PF_TRANS_OUT:=0;
+            lv_E_PF_TRANS_OUT:=0;
+          END IF;
+        ---------------------------------------------------------
+          /*--------------------------*/
+          /* Check of refunded amount */
+          /*--------------------------*/
+          SELECT COUNT(*) INTO lv_count
+          FROM loan_refund_details
+          WHERE empcode=c1.empcode AND category_code='PF' AND
+            TRUNC(refund_date, 'MM')= TRUNC(lv_mon, 'MM');
+          --
+          IF lv_count> 0 THEN
+            SELECT SUM(NVL(refund_pri,0))  INTO lv_M_R_LOAN_REF2
+            FROM loan_refund_details
+            WHERE empcode=c1.empcode AND category_code='PF' AND
+            TRUNC(refund_date, 'MM')= TRUNC(lv_mon, 'MM')
+            GROUP BY empcode;
+            /* Add this amount to C PF */
+            lv_M_PF_MCB:= lv_M_PF_MCB + lv_M_R_LOAN_REF2;
+            IF lv_loan_mon_flag= 'F' THEN
+               lv_M_R_LOAN_BAL:= lv_M_R_LOAN_BAL -lv_M_R_LOAN_REF2;
+            END IF;
+            lv_M_R_LOAN_REF:= lv_M_R_LOAN_REF+ lv_M_R_LOAN_REF2;
+          ELSE
+            lv_M_R_LOAN_REF2:= 0;
+          END IF;
+          /*--------------------------*/
+        ---------------------------------------------------------
+        /* do not pay interest of last month for settled cases */
+          IF ((c1.pf_settle_status= 'S') AND (TRUNC(lv_mon, 'MM')=TRUNC(c1.pf_settle_date, 'MM'))) THEN
+            lv_M_PF_INT:= 0;
+            lv_E_PF_INT:= 0;
+            lv_M_PF_MCB:= lv_M_PF_MCB+ (lv_M_PF+ lv_M_PF_Arr+lv_VPF+ lv_M_PF_TRANS_IN- lv_M_PF_TRANS_OUT);
+            lv_E_PF_MCB:= lv_E_PF_MCB+ (lv_E_PF+ lv_E_PF_Arr+ lv_E_APF+ lv_E_APF_Arr+ lv_E_PF_TRANS_IN- lv_E_PF_TRANS_OUT);
+          ELSE
+            lv_M_PF_MCB:= lv_M_PF_MCB+ (lv_M_PF+ lv_M_PF_Arr+lv_VPF+ lv_M_PF_TRANS_IN- lv_M_PF_TRANS_OUT);
+            lv_E_PF_MCB:= lv_E_PF_MCB+ (lv_E_PF+ lv_E_PF_Arr+ lv_E_APF+ lv_E_APF_Arr+ lv_E_PF_TRANS_IN- lv_E_PF_TRANS_OUT);
+            -- updated interest rate to 11%
+            -- lv_M_PF_INT:= lv_M_PF_MCB*0.01;
+            -- lv_E_PF_INT:= lv_E_PF_MCB*0.01;
+            -- lv_M_PF_INT:= lv_M_PF_MCB*(11/12)/100;
+            -- lv_E_PF_INT:= lv_E_PF_MCB*(11/12)/100;
+            ----------------------------------------------------
+            /* till 30/06/2000 12 percent and then 11 percent */
+            /* and from 01/04/2001 onwards 9.5 percent        */
+            /* and from 01/04/2004 onwards 9.5 percent        */
+            ----------------------------------------------------
+            IF (lv_mon)<= TO_DATE('30-JUN-2000') THEN
+              lv_M_PF_INT:= lv_M_PF_MCB*(12/12)/100;
+              lv_E_PF_INT:= lv_E_PF_MCB*(12/12)/100;
+            ELSE
+              IF (lv_mon)< TO_DATE('01-APR-2001') THEN
+                lv_M_PF_INT:= lv_M_PF_MCB*(11/12)/100;
+                lv_E_PF_INT:= lv_E_PF_MCB*(11/12)/100;
+              ELSE
+                IF (lv_mon)< TO_DATE('01-APR-2003') THEN
+                  lv_M_PF_INT:= lv_M_PF_MCB*(9.5/12)/100;
+                  lv_E_PF_INT:= lv_E_PF_MCB*(9.5/12)/100;
+                ELSE
+                  IF (lv_mon)< TO_DATE('01-APR-2004') THEN
+                    lv_M_PF_INT:= lv_M_PF_MCB*(9.5/12)/100;
+                    lv_E_PF_INT:= lv_E_PF_MCB*(9.5/12)/100;
+                  ELSE
+                    IF (lv_mon)< TO_DATE('01-APR-2005') THEN
+                      lv_M_PF_INT:= lv_M_PF_MCB*(9.5/12)/100;
+                      lv_E_PF_INT:= lv_E_PF_MCB*(9.5/12)/100;
+                    ELSE
+                    /*
+                      lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                      lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);*/
+                      ----23.3.2011
+                      IF (lv_mon)< TO_DATE('01-APR-2010') THEN
+                      lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                      lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+                      else
+                      IF (lv_mon)< TO_DATE('01-APR-2011') THEN
+                      lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/12)/100,2);
+                      lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/12)/100,2);
+                      else
+                       IF (lv_mon)< TO_DATE('01-APR-2012') THEN
+         
+                ------------------------------------------------------------------------------------------------
+                --------------------dated 30.03.2011-----------------------------------------------------
+                     if v_dol is not null then ----not null
+
+                       If  round(MONTHS_BETWEEN((lv_mon),v_dol),2)>=36  then----1
+                       lv_M_PF_INT:=0;
+                       lv_E_PF_INT:=0;
+
+                       else----1
+
+                       dbms_output.put_line('PF settlement status:::' ||c1.pf_settle_status);
+
+                       if c1.pf_settle_status= 'S' then ----S
+
+                       if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---2
+
+                     --   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                     --  lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/12)/100,2);
+                       --dbms_output.put_line('SM :'||lv_M_PF_INT);
+                       --dbms_output.put_line('SE :'||lv_E_PF_INT);
+
+                       else
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/12)/100,2);
+
+                     --  dbms_output.put_line('SM.1 :'||lv_M_PF_INT);
+                     --  dbms_output.put_line('SE.1 :'||lv_E_PF_INT);
+
+                       end if;---2
+
+                       else ---S
+
+                       if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---3
+
+                      -- lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                      -- lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.25/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.25/12)/100,2);
+
+
+                       else
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.25/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.25/12)/100,2);
+
+                       end if; ---3
+
+                       end if; ---S
+
+                       end if;---1
+                       else---not null
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.25/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.25/12)/100,2);
+                       end if;---not null
+                      ------------------------------------------------------------------------------------------------
+                      else--2012
+                      IF (lv_mon)< TO_DATE('01-APR-2012') THEN
+                      
+                        if v_dol is not null then ----not null
+
+                       If  round(MONTHS_BETWEEN((lv_mon),v_dol),2)>=36  then----1
+                       lv_M_PF_INT:=0;
+                       lv_E_PF_INT:=0;
+
+                       else----1
+
+                       dbms_output.put_line('PF settlement status:::' ||c1.pf_settle_status);
+
+                       if c1.pf_settle_status= 'S' then ----S
+
+                       if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---2
+
+                     --   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                     --  lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+                       --dbms_output.put_line('SM :'||lv_M_PF_INT);
+                       --dbms_output.put_line('SE :'||lv_E_PF_INT);
+
+                       else
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+
+                     --  dbms_output.put_line('SM.1 :'||lv_M_PF_INT);
+                     --  dbms_output.put_line('SE.1 :'||lv_E_PF_INT);
+
+                       end if;---2
+
+                       else ---S
+
+                       if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---3
+
+                      -- lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                      -- lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+
+
+                       else
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+
+                       end if; ---3
+
+                       end if; ---S
+
+                       end if;---1
+                       else---not null
+                       lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/12)/100,2);
+                       lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/12)/100,2);
+                       end if;
+                       
+                       else --2013
+                       IF (lv_mon)< TO_DATE('01-APR-2014') THEN
+                       
+                               if v_dol is not null then ----not null
+
+                               If  round(MONTHS_BETWEEN((lv_mon),v_dol),2)>=36  then----1
+                               lv_M_PF_INT:=0;
+                               lv_E_PF_INT:=0;
+
+                               else----1
+
+                               dbms_output.put_line('PF settlement status:::' ||c1.pf_settle_status);
+
+                               if c1.pf_settle_status= 'S' then ----S
+
+                                   if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---2
+
+                                     --   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                     --  lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+                                   --dbms_output.put_line('SM :'||lv_M_PF_INT);
+                                   --dbms_output.put_line('SE :'||lv_E_PF_INT);
+
+                                   else
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+                                     --  dbms_output.put_line('SM.1 :'||lv_M_PF_INT);
+                                     --  dbms_output.put_line('SE.1 :'||lv_E_PF_INT);
+
+                                   end if;---2
+
+                               else ---S
+
+                                   if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---3
+
+                                      -- lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                      -- lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+
+                                   else
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+                                   end if; ---3
+
+                                end if; ---S
+
+                               end if;---1
+                           else---not null
+                               lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                               lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+                           
+                           
+                           end if;
+                      
+                        else --2014
+                        
+                         if v_dol is not null then ----not null
+
+                           If  round(MONTHS_BETWEEN((lv_mon),v_dol),2)>=36  then----1
+                           lv_M_PF_INT:=0;
+                           lv_E_PF_INT:=0;
+
+                           else----1
+
+                           dbms_output.put_line('PF settlement status:::' ||c1.pf_settle_status);
+
+                               if c1.pf_settle_status= 'S' then ----S
+
+                                   if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---2
+
+                                     --   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                     --  lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(9.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+                                   --dbms_output.put_line('SM :'||lv_M_PF_INT);
+                                   --dbms_output.put_line('SE :'||lv_E_PF_INT);
+
+                                   else
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+                                     --  dbms_output.put_line('SM.1 :'||lv_M_PF_INT);
+                                     --  dbms_output.put_line('SE.1 :'||lv_E_PF_INT);
+
+                                   end if;---2
+
+                                   else ---S
+
+                                   if to_char(v_dol,'MM')= to_char(lv_mon,'MM') then---3
+
+                                      -- lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                      -- lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.5/365)/100,2)*(to_number(to_char(v_dol,'DD'))-1);
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+
+                                   else
+                                   lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                                   lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+
+                                   end if; ---3
+
+                               end if; ---S
+
+                           end if;---1
+                           else---not null
+                           lv_M_PF_INT:= ROUND(lv_M_PF_MCB*(8.75/12)/100,2);
+                           lv_E_PF_INT:= ROUND(lv_E_PF_MCB*(8.75/12)/100,2);
+                           
+                           
+                           end if;
+                        
+                        
+                        end if;--2014
+                      
+                      end if;
+                      end if;
+
+                      End if;
+                      end if;
+
+                    END IF;
+                  END IF;
+                END IF;
+              END IF;
+            END IF;
+          END IF;
+        lv_M_PF_INTC:= lv_M_PF_INTC+ lv_M_PF_INT;
+        lv_E_PF_INTC:= lv_E_PF_INTC+ lv_E_PF_INT;
+        lv_M_PF_MTotal:= lv_M_PF_MCB+ lv_M_PF_INTC;
+        lv_E_PF_MTotal:= lv_E_PF_MCB+ lv_E_PF_INTC;
+        
+        --M_PF_INCR:=M_PF+M_PF_ARR+VPF
+        INSERT INTO salary_PF_monthly_details(empcode, PF_month, basic,
+          M_PF_OBAL, E_PF_OBAL, M_PF, E_PF,
+          E_APF, M_PF_Arr, E_PF_Arr, E_APF_Arr, VPF, M_PF_TRANS_IN, E_PF_TRANS_IN,
+          M_PF_MCB, E_PF_MCB, M_PF_INT, E_PF_INT, M_PF_INTC, E_PF_INTC,
+          M_PF_MTotal, E_PF_MTotal, M_NR_LOAN, E_NR_LOAN,
+          M_R_LOAN_AMT, M_R_LOAN_REF, M_R_LOAN_INT, M_R_LOAN_BAL,
+          M_PF_TRANS_OUT, E_PF_TRANS_OUT, PF_CMonth, pf_ac_no, E_FPF, PF_FIN_YEAR)
+        VALUES(c1.empcode, lv_mon, lv_basic,
+          lv_M_PF_OBAL, lv_E_PF_OBAL, lv_M_PF, lv_E_PF,
+          lv_E_APF, lv_M_PF_Arr, lv_E_PF_Arr, lv_E_APF_Arr, lv_VPF, lv_M_PF_TRANS_IN, lv_E_PF_TRANS_IN,
+          lv_M_PF_MCB, lv_E_PF_MCB, lv_M_PF_INT, lv_E_PF_INT, lv_M_PF_INTC, lv_E_PF_INTC,
+          lv_M_PF_MTotal, lv_E_PF_MTotal, lv_M_NR_LOAN, lv_E_NR_LOAN,
+          lv_M_R_LOAN_AMT, lv_M_R_LOAN_REF, lv_M_R_LOAN_INT, lv_M_R_LOAN_BAL,
+          lv_M_PF_TRANS_OUT, lv_E_PF_TRANS_OUT, TO_CHAR(lv_mon, 'MON, yyyy'), c1.pf_ac_no, lv_E_FPF, pp_fin_year);
+        lv_M_PF_OBAL:=0;
+        lv_E_PF_OBAL:=0;
+        lv_M_PF_TRANS_IN:= 0;
+        lv_E_PF_TRANS_IN:= 0;
+        COMMIT;
+      END IF; /*TRUNC(lv_mon, 'MM') >= TRUNC(lv_max_sal_date, 'MM') THEN */
+    --------------
+    END LOOP;
+    --------------
+  END LOOP; /* c1 loop */
+END;
+/

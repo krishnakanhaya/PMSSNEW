@@ -1,0 +1,55 @@
+download apex which version do you want.
+paste apex in oracle app folder
+
+Copy Apex New Version and Past to Your Apex Installation Path Like "C:\Oracle\app"
+
+Run cmd Write Your Apex Installation Path Like "cd C:\Oracle\app\apex"  (Press Enter)
+              
+c:   (Press Enter)
+
+sqlplus   (Press Enter)
+
+Write Your SYS Username:  sys /as sysdba      (Press Enter)
+Write Your SYS Password :         (Press Enter)
+
+@apexins.sql sysaux sysaux temp /i/         (This command for copy image) (Press Enter)
+
+@apex_epg_config.sql  Write Your Apex Installation Path Like "C:\Oracle\app\"  (Press Enter)
+
+@apxconf.sql;     (Press Enter)
+
+User Name Auto come:- ADMIN
+
+Write Your Email:-                                            (Press Enter)
+
+Write Your Password :-                                   (Press Enter)
+
+Enter a port for the XDB HTTP Listener  8080  (Press Enter)
+
+(Must be Unlock Under This (APEX%) User):-
+========================================================
+alter user anonymous account unlock;
+
+SELECT STATUS FROM DBA_REGISTRY WHERE COMP_ID = 'APEX';
+
+
+
+
+-----------------------------------------------------------------------------------------------
+remove apex:-
+c:cd C:\Oracle\app\apex sqlplus
+sys user name and password
+SQL> @apxremov.sql
+removed apex from our computer system.
+
+-----------------------------------------------------------------------------------
+change password of oracle apex:
+for change password in oracle apex workspace on
+go sql prompt:
+and run := sql>@apxchpwd.sql
+
+
+see video link:
+INSTALL ORACLE APEX STEP BY STEP LINK:
+
+https://tutorial.ittechbd.com/install-oracle-apex-201-with-oracle

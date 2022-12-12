@@ -1,0 +1,25 @@
+	
+1. ORDS 22.2.1 supports Tomcat Web server release 8.5.x through Release 9.0.x.
+
+Note: ORDS do not support Tomcat 10
+
+2. As a pre requirement, Tomcat should be installed and configured.
+
+3. Copy the contents of the <apex directory>/images folder to <Tomcat directory>/webapps/i/.
+
+Where:
+
+<apex directory> is the directory location of the Oracle Application Express distribution.
+
+<Tomcat directory> is the folder where Apache Tomcat is installed.
+
+4. Set the config.url system property, before starting Apache Tomcat, run this command: set JAVA_OPTS="-Dconfig.url=C:\App\ords\ORDS_config"
+
+5. Move the ords.war file into the webapps folder where Apache Tomcat is installed.
+6. Access the APEX URL
+
+Note: The port defined for Tomcat APEX/ORDS should be different than the Standalone
+
+Reference: 5.1.3 Apache Tomcat
+
+https://docs.oracle.com/en/database/oracle/oracle-rest-data-services/22.2/ordig/deploying-and-monitoring-oracle-rest-data-services.html#GUID-51B6C1BE-C634-4176-9160-C6F459BD1373

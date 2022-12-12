@@ -1,0 +1,135 @@
+# Updated on 10 Feb 2004
+
+UMSPUB=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=103.11.85.220)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SID=umsdbs)
+    )
+  )
+
+ERPTEST_TREE=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.76)
+      (PORT=1522)
+    )
+    (CONNECT_DATA=
+      (SERVER=dedicated)
+      (SERVICE_NAME=orcltree)
+    )
+  )
+
+ERPDBS=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.5)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SID=ORCL)
+    )
+  )
+
+ORCLDR=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.9)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SERVICE_NAME=orcl)
+    )
+  )
+
+ORCL12C=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.104.231)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SERVER=dedicated)
+      (SERVICE_NAME=orcl)
+    )
+  )
+
+ERPDBS_10G=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.9)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SID=ORCL)
+    )
+  )
+
+UMSDBS=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=103.11.85.220)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SERVICE_NAME=UMSDBS)
+    )
+  )
+
+ORCL12C=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.8)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SERVICE_NAME=orcl)
+    )
+  )
+
+ORCL_TEST=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.76)
+      (PORT=1522)
+    )
+    (CONNECT_DATA=
+      (SERVER=dedicated)
+      (SERVICE_NAME=orcl_test)
+    )
+  )
+
+REP60_S-930,REP60_S-930.WORLD=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=S-930)
+      (PORT=1949)
+    )
+    (CONNECT_DATA=
+    )
+  )
+
+ERPDBS_19=
+  (DESCRIPTION=
+    (ADDRESS=
+      (PROTOCOL=TCP)
+      (HOST=172.16.0.203)
+      (PORT=1521)
+    )
+    (CONNECT_DATA=
+      (SID=ORCL)
+    )
+  )

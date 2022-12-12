@@ -1,0 +1,21 @@
+	
+1. Stop ORDS if already running or if any process of ords exists
+2.. Open settings.xml from the <ORDS_INSTALL_PATH>\global\settings.xml
+
+Example:C:\App\ords\global\settings.xml
+3. Replace the port number under below configuration line
+
+<entry key="standalone.http.port">8080</entry>
+
+Note: Ensure the port is not blocked by your firewall
+
+4. Start ORDS using the command "ords serve"
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 1+ hour ago		[ODM Question]
+
+
+How to change the port for ORDS which is already configured.

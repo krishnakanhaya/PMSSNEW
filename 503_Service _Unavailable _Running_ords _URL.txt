@@ -1,0 +1,375 @@
+1. Login to the database in which APEX is installed(APEXDB).
+2. Issue below statement to change the account status
+ALTER USER APEX_PUBLIC_USER ACCOUNT UNLOCK;
+ALTER USER APEX_PUBLIC_USER IDENTIFIED BY new_password;
+
+3. Restart ORDS for the changes to take effect
+
+ords serve
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 42 mins ago		[ODM Proposed Solution Justif]
+
+
+WHY THE SOLUTION WILL RESOLVE THE ISSUE
+========================================
+By default APEX_PUBLIC_USER will be locked status and password will be expired.
+Unlocking the schema user will be able to communicate via ORDS for any HTTP call contacting to the database via proxy APEX_PUBLIC_USER
+
+WHAT WILL THE PROPOSED SOLUTION DO
+===================================
+unlocking APEX_PUBLIC_USER will make ORDS and APEX function properly
+
+REFERENCES
+=============
+5.4.4 Configuring the APEX_PUBLIC_USER Account
+https://docs.oracle.com/en/database/oracle/application-express/20.1/htmig/downloading-installing-Oracle-AE.html#GUID-0619448A-56FB-43E1-A479-C45EC5002E4B
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 45 mins ago		[ODM Proposed Solution(s)]
+
+
+Unlock APEX_PUBLIC_USER account in the APEXDB
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 46 mins ago		[ODM Cause Justification]
+
+
+EVIDENCE OF CAUSE
+==================
+When running /ords URL, below exception is observed in the ords startup output.
+
+2022-09-29T05:43:02.150Z SEVERE <lQ_GAbOU3uQcbCOlgyD50A> GET 172.16.0.203 /ords/ 503 ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+ServiceUnavailableException [statusCode=503, logLevel=SEVERE, reasons=[ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+SUPPORT OF CONCLUSION
+========================
+Since it is a new installation, APEX has only been installed and no post APEX install instruction is followed.
+
+REFERENCES
+============
+APEX Unavailable After the Expiration of the APEX_PUBLIC_USER Password - 503 Service Unavailable or 404 Page not Found ( Doc ID 2058706.1 )
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 48 mins ago		[ODM Cause Determination]
+
+
+New installation of APEX and ORDS. APEX_PUBLIC_USER by default will be locked which will cause ORA-28000: The account is locked. when JDBC pool connection to the database
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 50 mins ago		[ODM Research]
+
+
+-- Technical Review --
+
+Note: This is INTERNAL ONLY research. No action should be taken by the customer on this information. This is research only, and may NOT be applicable to your specific situation.
+
+Issue exactly matches APEX Unavailable After the Expiration of the APEX_PUBLIC_USER Password - 503 Service Unavailable or 404 Page not Found ( Doc ID 2058706.1 )
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 59 mins ago		[ODM Issue Verification]
+
+
+Verified the issue in the screen shots as noted below:
+
+SCREEN SHOTS
+-----------------------
+See the following error:
+2022-09-29T05:43:02.150Z SEVERE <lQ_GAbOU3uQcbCOlgyD50A> GET 172.16.0.203 /ords/ 503 ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+ServiceUnavailableException [statusCode=503, logLevel=SEVERE, reasons=[ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+]]
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 1+ hour ago		[ODM Issue Clarification]
+
+
+On : 22.2.1 version, All Issues
+
+22.2.1: 503 Service Unavailable Running /ords URL
+
+Configured ORDS 22.2.1 with APEX 20.1
+Running ORDS as standalone mode over port 8081
+
+Running APEX URL shows http://<servername>:<port>/ords
+
+ERROR
+-----------------------
+503 Service Unavailable
+ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+STEPS
+-----------------------
+The issue can be reproduced at will with the following steps:
+1. Installed ORDS 22.2.1
+2. Configured ORDS using interactive mode
+3. Configured images for APEX
+5. Running URL in the browser http://<servername>:<port>/ords
+
+BUSINESS IMPACT
+-----------------------
+The issue has the following business impact:
+It is critical to install apex/ords on tomcat, since migrating Oralce Forms 6i to Apex
+
+ 	 	 
+ 	
+ 
+ 
+	Oracle Support	- 1+ hour ago		[ODM Data Collection]
+
+
+-------------------DC # 1--------------
+
+-- Script Output --
+
+Description
+--------------
+Output captured from the chat of Parent SR
+
+Relevant Information Collection
+---------------------------------------
+ORDS: Release 22.2 Production on Thu Sep 29 05:32:54 2022
+
+Copyright (c) 2010, 2022, Oracle.
+
+Configuration:
+/C:/App/ords/ORDS_config/
+
+Oracle REST Data Services - Interactive Install
+
+Enter a number to select the type of installation
+[1] Install or upgrade ORDS in the database only
+[2] Create or update a database pool and install/upgrade ORDS in the database
+[3] Create or update a database pool only
+Choose [1]: 2
+Enter a number to select the database pool to update, or create an additional database pool.
+The selected (or created) database pool will be used to install or upgrade ORDS in the database.
+[1] default jdbc:oracle:thin:@//172.16.0.203:1521/APEXDB
+[2] Create an additional database pool
+Choose [1]: 1
+Enter a number to select the database connection type to use
+[1] Basic (host name, port, service name)
+[2] TNS (TNS alias, TNS directory)
+[3] Custom database URL
+Choose [1]: 1
+Enter the database host name [172.16.0.203]:
+Enter the database listen port [1521]:
+Enter the database service name [APEXDB]:
+Provide database user name with administrator privileges.
+Enter the administrator username: sys
+Enter the database password for SYS AS SYSDBA:
+Connecting to database user: SYS AS SYSDBA url: jdbc:oracle:thin:@//172.16.0.203:1521/APEXDB
+
+Retrieving information.
+Connecting to database user: ORDS_PUBLIC_USER url: jdbc:oracle:thin:@//172.16.0.203:1521/APEXDB
+Enter a number to select additional feature(s) to enable:
+[1] Database Actions (Enables all features)
+[2] REST Enabled SQL and Database API
+[3] REST Enabled SQL
+[4] Database API
+[5] None
+Choose [1]: 1
+Enter a number to configure and start ORDS in standalone mode
+[1] Configure and start ORDS in standalone mode
+[2] Skip
+Choose [1]: 1
+Enter a number to use HTTP or HTTPS protocol
+[1] HTTP
+[2] HTTPS
+Choose [1]: 1
+Enter the HTTP port [8081]:
+Enter the APEX static resources location [/C:/App/apex_20.1/apex/images/]:
+2022-09-29T05:33:37.794Z INFO Oracle REST Data Services schema version 22.2.1.r2021302 is installed.
+2022-09-29T05:33:37.935Z INFO HTTP and HTTP/2 cleartext listening on host: 0.0.0.0 port: 8081
+2022-09-29T05:33:37.966Z INFO Disabling document root because the specified folder does not exist: C:\App\ords\ORDS_config\global\doc_root
+2022-09-29T05:33:40.404Z INFO Configuration properties for: |default|lo|
+db.servicename=APEXDB
+standalone.context.path=/ords
+db.hostname=172.16.0.203
+db.password=******
+conf.use.wallet=true
+security.requestValidationFunction=wwv_flow_epg_include_modules.authorize
+standalone.static.context.path=/i
+database.api.enabled=true
+db.username=ORDS_PUBLIC_USER
+standalone.http.port=8081
+standalone.static.path=/C:/App/apex_20.1/apex/images/
+restEnabledSql.active=true
+resource.templates.enabled=false
+plsql.gateway.mode=proxied
+db.port=1521
+feature.sdw=true
+config.required=true
+db.connectionType=basic
+standalone.doc.root=C:\App\ords\ORDS_config\global\doc_root
+
+2022-09-29T05:33:40.404Z WARNING *** jdbc.MaxLimit in configuration |default|lo| is using a value of 10, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:33:40.404Z WARNING *** jdbc.InitialLimit in configuration |default|lo| is using a value of 3, this setting may not be sized adequately for a production environment ***
+2022-09-29T05:33:50.029Z INFO Oracle REST Data Services initialized
+Oracle REST Data Services version : 22.2.1.r2021302
+Oracle REST Data Services server info: jetty/9.4.48.v20220622
+Oracle REST Data Services java info: Java HotSpot(TM) 64-Bit Server VM 11.0.10+8-LTS-162
+
+2022-09-29T05:43:02.090Z WARNING :::got unchecked exception from user-defined connection labeling callback
+2022-09-29T05:43:02.150Z SEVERE <lQ_GAbOU3uQcbCOlgyD50A> GET 172.16.0.203 /ords/ 503 ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+ServiceUnavailableException [statusCode=503, logLevel=SEVERE, reasons=[ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+]]
+at oracle.dbtools.http.errors.ServletResponseExceptionMapper.mapError(ServletResponseExceptionMapper.java:48)
+at oracle.dbtools.http.errors.ErrorLogger.log(ErrorLogger.java:26)
+at oracle.dbtools.http.errors.ErrorPageFilter.doFilter(ErrorPageFilter.java:106)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.secure.ForceHttpsFilter.doFilter(ForceHttpsFilter.java:74)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.auth.ForceAuthFilter.doFilter(ForceAuthFilter.java:44)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.filters.Filters.filter(Filters.java:67)
+at oracle.dbtools.http.entrypoint.EntryPoint.service(EntryPoint.java:70)
+at oracle.dbtools.http.entrypoint.EntryPointServlet.service(EntryPointServlet.java:125)
+at oracle.dbtools.entrypoint.WebApplicationRequestEntryPoint.service(WebApplicationRequestEntryPoint.java:50)
+at javax.servlet.http.HttpServlet.service(HttpServlet.java:790)
+at org.eclipse.jetty.servlet.ServletHolder.handle(ServletHolder.java:799)
+at org.eclipse.jetty.servlet.ServletHandler.doHandle(ServletHandler.java:554)
+at org.eclipse.jetty.server.handler.ScopedHandler.nextHandle(ScopedHandler.java:233)
+at org.eclipse.jetty.server.session.SessionHandler.doHandle(SessionHandler.java:1624)
+at org.eclipse.jetty.server.handler.ScopedHandler.nextHandle(ScopedHandler.java:233)
+at org.eclipse.jetty.server.handler.ContextHandler.doHandle(ContextHandler.java:1440)
+at org.eclipse.jetty.server.handler.ScopedHandler.nextScope(ScopedHandler.java:188)
+at org.eclipse.jetty.servlet.ServletHandler.doScope(ServletHandler.java:505)
+at org.eclipse.jetty.server.session.SessionHandler.doScope(SessionHandler.java:1594)
+at org.eclipse.jetty.server.handler.ScopedHandler.nextScope(ScopedHandler.java:186)
+at org.eclipse.jetty.server.handler.ContextHandler.doScope(ContextHandler.java:1355)
+at org.eclipse.jetty.server.handler.ScopedHandler.handle(ScopedHandler.java:141)
+at org.eclipse.jetty.server.handler.ContextHandlerCollection.handle(ContextHandlerCollection.java:234)
+at org.eclipse.jetty.server.handler.HandlerCollection.handle(HandlerCollection.java:146)
+at org.eclipse.jetty.server.handler.StatisticsHandler.handle(StatisticsHandler.java:181)
+at org.eclipse.jetty.server.handler.HandlerWrapper.handle(HandlerWrapper.java:127)
+at org.eclipse.jetty.server.Server.handle(Server.java:516)
+at org.eclipse.jetty.server.HttpChannel.lambda$handle$1(HttpChannel.java:487)
+at org.eclipse.jetty.server.HttpChannel.dispatch(HttpChannel.java:732)
+at org.eclipse.jetty.server.HttpChannel.handle(HttpChannel.java:479)
+at org.eclipse.jetty.server.HttpConnection.onFillable(HttpConnection.java:277)
+at org.eclipse.jetty.io.AbstractConnection$ReadCallback.succeeded(AbstractConnection.java:311)
+at org.eclipse.jetty.io.FillInterest.fillable(FillInterest.java:105)
+at org.eclipse.jetty.io.ChannelEndPoint$1.run(ChannelEndPoint.java:104)
+at org.eclipse.jetty.util.thread.QueuedThreadPool.runJob(QueuedThreadPool.java:883)
+at org.eclipse.jetty.util.thread.QueuedThreadPool$Runner.run(QueuedThreadPool.java:1034)
+at java.base/java.lang.Thread.run(Thread.java:834)
+Caused by: oracle.dbtools.url.mapping.TargetNotAvailableException: ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+at oracle.dbtools.url.mapping.db.PoolInjector.inject(PoolInjector.java:65)
+at oracle.dbtools.url.mapping.db.PoolInjector.inject(PoolInjector.java:49)
+at oracle.dbtools.url.mapping.db.DatabaseURLMappingBase.injectPLSQLGatewayConnection(DatabaseURLMappingBase.java:929)
+at oracle.dbtools.url.mapping.db.DatabaseURLMappingBase.addServices(DatabaseURLMappingBase.java:392)
+at oracle.dbtools.jdbc.pools.JDBCPoolURLMapping.addServices(JDBCPoolURLMapping.java:99)
+at oracle.dbtools.url.mapping.URLMappingBase.doFilter(URLMappingBase.java:75)
+at oracle.dbtools.url.mapping.db.DatabaseTenantMapping.dispatchSelf(DatabaseTenantMapping.java:212)
+at oracle.dbtools.url.mapping.db.DatabaseTenantMappingBase.doFilter(DatabaseTenantMappingBase.java:51)
+at oracle.dbtools.url.mapping.tenant.TenantMappingDispatcher.dispatch(TenantMappingDispatcher.java:56)
+at oracle.dbtools.jdbc.pools.local.DefaultLocalTenantMapping.dispatchSelf(DefaultLocalTenantMapping.java:102)
+at oracle.dbtools.url.mapping.db.DatabaseTenantMappingBase.doFilter(DatabaseTenantMappingBase.java:51)
+at oracle.dbtools.jdbc.pools.local.DefaultLocalTenantMapping.doFilter(DefaultLocalTenantMapping.java:71)
+at oracle.dbtools.url.mapping.tenant.TenantMappingDispatcher.dispatch(TenantMappingDispatcher.java:56)
+at oracle.dbtools.url.mapping.tenant.TenantMappingFilter.doFilter(TenantMappingFilter.java:75)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.forwarding.ForwardingFailedFilter.doFilter(ForwardingFailedFilter.java:41)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.auth.external.ExternalSessionFilter.doFilter(ExternalSessionFilter.java:59)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.apex.support.auth.ApexSessionQueryRewriteFilter.doFilter(ApexSessionQueryRewriteFilter.java:58)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.cors.CORSResponseFilter.doFilter(CORSResponseFilter.java:90)
+at oracle.dbtools.http.filters.HttpResponseFilter.doFilter(HttpResponseFilter.java:45)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.filters.AbsoluteLocationFilter.doFilter(AbsoluteLocationFilter.java:65)
+at oracle.dbtools.http.filters.HttpResponseFilter.doFilter(HttpResponseFilter.java:45)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.auth.external.ExternalAccessValidationFilter.doFilter(ExternalAccessValidationFilter.java:59)
+at oracle.dbtools.http.filters.HttpFilter.doFilter(HttpFilter.java:47)
+at oracle.dbtools.http.filters.FilterChainImpl.doFilter(FilterChainImpl.java:64)
+at oracle.dbtools.http.errors.ErrorPageFilter.doFilter(ErrorPageFilter.java:87)
+... 40 more
+Caused by: oracle.dbtools.common.jdbc.ConnectionPoolConfigurationException: ORDS was unable to make a connection to the database. This can occur if the database is unavailable, the maximum number of sessions has been reached or the pool is not correctly configured. The connection pool named: |default|lo| had the following error(s): ORA-28000: The account is locked.
+
+at oracle.dbtools.common.jdbc.ConnectionPoolExceptions.from(ConnectionPoolExceptions.java:47)
+at oracle.dbtools.common.jdbc.ConnectionPoolExceptions.from(ConnectionPoolExceptions.java:54)
+at oracle.dbtools.common.jdbc.DataSourceConnection.getPooledConnection(DataSourceConnection.java:227)
+at oracle.dbtools.common.jdbc.DataSourceConnection.getPooledConnection(DataSourceConnection.java:186)
+at oracle.dbtools.common.jdbc.DataSourceConnection.getDefaultConnection(DataSourceConnection.java:144)
+at oracle.dbtools.common.jdbc.DataSourceConnection.getConnection(DataSourceConnection.java:58)
+at oracle.dbtools.jdbc.pools.JDBCSchemaTarget.getConnection(JDBCSchemaTarget.java:81)
+at oracle.dbtools.common.config.db.SchemaConnectionFactoryBase.inject(SchemaConnectionFactoryBase.java:70)
+at oracle.dbtools.url.mapping.db.PoolInjector.inject(PoolInjector.java:59)
+... 74 more
+Caused by: oracle.dbtools.common.ucp.ConnectionLabelingException: Error occurred when attempting to configure url: jdbc:oracle:thin:@//172.16.0.203:1521/APEXDB with labels: {oracle.dbtools.jdbc.label.cleanup=RECYCLE, oracle.dbtools.jdbc.label.schema=APEX_PUBLIC_USER}
+at oracle.dbtools.common.ucp.LabelingCallback.handle(LabelingCallback.java:192)
+at oracle.dbtools.common.ucp.LabelingCallback.proxyToSchema(LabelingCallback.java:355)
+at oracle.dbtools.common.ucp.LabelingCallback.configure(LabelingCallback.java:78)
+at oracle.ucp.common.UniversalConnectionPoolImpl.borrowConnectionAndValidateHelper(UniversalConnectionPoolImpl.java:258)
+at oracle.ucp.common.UniversalConnectionPoolImpl.borrowConnectionAndValidate(UniversalConnectionPoolImpl.java:166)
+at oracle.ucp.common.UniversalConnectionPoolImpl.borrowConnection(UniversalConnectionPoolImpl.java:139)
+at oracle.ucp.jdbc.JDBCConnectionPool.borrowConnection(JDBCConnectionPool.java:185)
+at oracle.ucp.jdbc.oracle.OracleJDBCConnectionPool.borrowConnection(OracleJDBCConnectionPool.java:611)
+at oracle.ucp.jdbc.oracle.OracleConnectionConnectionPool.borrowConnection(OracleConnectionConnectionPool.java:119)
+at oracle.ucp.jdbc.PoolDataSourceImpl.getConnection(PoolDataSourceImpl.java:1880)
+at oracle.ucp.jdbc.PoolDataSourceImpl$3.build(PoolDataSourceImpl.java:4050)
+at oracle.ucp.jdbc.PoolDataSourceImpl.getConnection(PoolDataSourceImpl.java:1823)
+at oracle.dbtools.common.ucp.PoolDataSourceDelegate.getConnection(PoolDataSourceDelegate.java:109)
+at oracle.dbtools.common.config.db.RefreshablePoolDataSource.getConnection(RefreshablePoolDataSource.java:109)
+at oracle.dbtools.common.ucp.PoolDataSourceDelegate.getConnection(PoolDataSourceDelegate.java:109)
+at oracle.dbtools.common.ucp.PoolDataSourceDelegate.getConnection(PoolDataSourceDelegate.java:109)
+at oracle.dbtools.common.ucp.PoolDataSourceDelegate.getConnection(PoolDataSourceDelegate.java:96)
+at oracle.dbtools.common.jdbc.DataSourceConnection.getPooledConnection(DataSourceConnection.java:210)
+... 80 more
+Caused by: java.sql.SQLException: ORA-28000: The account is locked.
+
+at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:630)
+at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:559)
+at oracle.jdbc.driver.T4CTTIoer11.processError(T4CTTIoer11.java:554)
+at oracle.jdbc.driver.T4CTTIfun.processError(T4CTTIfun.java:1377)
+at oracle.jdbc.driver.T4CTTIoauthenticate.processError(T4CTTIoauthenticate.java:782)
+at oracle.jdbc.driver.T4CTTIfun.receive(T4CTTIfun.java:772)
+at oracle.jdbc.driver.T4CTTIfun.doRPC(T4CTTIfun.java:299)
+at oracle.jdbc.driver.T4CTTIoauthenticate.doOAUTH(T4CTTIoauthenticate.java:450)
+at oracle.jdbc.driver.T4CTTIoauthenticate.doOAUTH(T4CTTIoauthenticate.java:2101)
+at oracle.jdbc.driver.T4CConnection.doProxySession(T4CConnection.java:3660)
+at oracle.jdbc.driver.PhysicalConnection.openProxySession(PhysicalConnection.java:3302)
+at oracle.ucp.jdbc.proxy.oracle$1ucp$1jdbc$1proxy$1oracle$1ConnectionProxy$2oracle$1jdbc$1internal$1OracleConnection$$$Proxy.openProxySession(Unknown Source)
+at oracle.dbtools.common.ucp.LabelingCallback$ProxySchemaTask.call(LabelingCallback.java:434)
+at oracle.dbtools.common.ucp.LabelingCallback$ProxySchemaTask.call(LabelingCallback.java:422)
+at oracle.dbtools.common.concurrent.RetryStrategy.execute(RetryStrategy.java:46)
+at oracle.dbtools.common.ucp.LabelingCallback.proxyToSchema(LabelingCallback.java:342)
+... 96 more
+
+Relevance to the Issue
+---------------------------
+Caused by: java.sql.SQLException: ORA-28000: The account is locked.

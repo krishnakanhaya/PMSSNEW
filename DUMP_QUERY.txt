@@ -1,0 +1,1 @@
+C:\Windows\system32>impdp directory=EXP dumpfile=ERPDEV_20092022.DMP logfile=Import_ERPDEV_22092022.log remap_schema=ERPDEV:APEXDB

@@ -1,0 +1,52 @@
+
+select *
+from ACCOUNTS_SUNDRY_DETAILS a1 where  Cr_amt   not in (
+select  Dr_amt  from ACCOUNTS_SUNDRY_DETAILS a2 where a2.subledger_code=a1.subledger_code AND A2.DIVCOD=A1.DIVCOD AND A2.EXAREACOD=A1.EXAREACOD
+
+)and subledger_code='2019CW07' 
+
+UNION  
+
+select *
+from ACCOUNTS_SUNDRY_DETAILS a1 where  Dr_amt   not in (
+select  Cr_amt  from ACCOUNTS_SUNDRY_DETAILS a2 where a2.subledger_code=a1.subledger_code AND A2.DIVCOD=A1.DIVCOD AND A2.EXAREACOD=A1.EXAREACOD
+)and subledger_code='2019CW07'
+
+
+CREATE USER APEXDB IDENTIFIED BY ED#HQ$T3R9;
+
+
+GRANT CONNECT TO APEXDB
+
+select * from ACCOUNTS_SUNDRY_DETAILS   where  subledger_code='2019CW07'
+
+
+212
+
+
+
+select voucher_type ,subledger_code,divcod,exareacod,subledger_code,dr_amt,cr_amt,on_ac_of from ACCOUNTS_SUNDRY_DETAILS   where subledger_code='2020CB07'
+group by voucher_type ,subledger_code,divcod,exareacod,subledger_code,dr_amt,cr_amt
+
+
+
+
+
+
+select sum(cr_amt),sum(dr_amt)from ACCOUNTS_SUNDRY_DETAILS
+   where subledger_code='2019CW07'
+   and dr_amt<>cr_amt
+group by subledger_code,divcod,exareacod,subledger_code
+
+
+
+
+---and subledger_code='2016DS01' 
+
+
+
+
+
+
+
+
